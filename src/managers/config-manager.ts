@@ -4,13 +4,13 @@
 
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { 
-  RenkeiConfig, 
-  UserPreferences, 
-  SystemInfo, 
-  ErrorCode, 
+import {
+  RenkeiConfig,
+  UserPreferences,
+  SystemInfo,
+  ErrorCode,
   RenkeiError,
-  DeepPartial 
+  DeepPartial,
 } from '../interfaces/types';
 
 export class ConfigManager {
@@ -101,7 +101,10 @@ export class ConfigManager {
    */
   getConfig(): RenkeiConfig {
     if (!this.config) {
-      throw new RenkeiError(ErrorCode.CONFIG_ERROR, '設定が初期化されていません');
+      throw new RenkeiError(
+        ErrorCode.CONFIG_ERROR,
+        '設定が初期化されていません'
+      );
     }
     return this.config;
   }
@@ -111,7 +114,10 @@ export class ConfigManager {
    */
   async updateConfig(updates: DeepPartial<RenkeiConfig>): Promise<void> {
     if (!this.config) {
-      throw new RenkeiError(ErrorCode.CONFIG_ERROR, '設定が初期化されていません');
+      throw new RenkeiError(
+        ErrorCode.CONFIG_ERROR,
+        '設定が初期化されていません'
+      );
     }
 
     try {
@@ -132,24 +138,28 @@ export class ConfigManager {
    */
   getUserPreferences(): UserPreferences {
     const config = this.getConfig();
-    return (config as any).userPreferences || {
-      theme: 'dark',
-      language: 'ja',
-      notifications: true,
-      autoSave: true,
-      debugMode: false
-    };
+    return (
+      (config as any).userPreferences || {
+        theme: 'dark',
+        language: 'ja',
+        notifications: true,
+        autoSave: true,
+        debugMode: false,
+      }
+    );
   }
 
   /**
    * ユーザー設定を更新
    */
-  async updateUserPreferences(preferences: Partial<UserPreferences>): Promise<void> {
+  async updateUserPreferences(
+    preferences: Partial<UserPreferences>
+  ): Promise<void> {
     const currentPreferences = this.getUserPreferences();
     const updatedPreferences = { ...currentPreferences, ...preferences };
-    
+
     await this.updateConfig({
-      userPreferences: updatedPreferences
+      userPreferences: updatedPreferences,
     } as any);
   }
 
@@ -160,11 +170,11 @@ export class ConfigManager {
     const config = this.getConfig();
     const claudeSettings = {
       permissions: config.permissions.permissions,
-      autoApprove: config.permissions.autoApprove
+      autoApprove: config.permissions.autoApprove,
     };
 
     const settingsPath = path.join(config.workspaceDir, 'settings.json');
-    
+
     try {
       await this.ensureDirectory(path.dirname(settingsPath));
       await fs.writeFile(
@@ -186,13 +196,13 @@ export class ConfigManager {
    */
   async getSystemInfo(): Promise<SystemInfo> {
     const packageJson = await this.loadPackageJson();
-    
+
     return {
       platform: process.platform,
       nodeVersion: process.version,
       tmuxVersion: await this.getTmuxVersion(),
       claudeCodeVersion: await this.getClaudeCodeVersion(),
-      renkeiVersion: packageJson.version || '1.0.0'
+      renkeiVersion: packageJson.version || '1.0.0',
     };
   }
 
@@ -282,21 +292,34 @@ export class ConfigManager {
     }
 
     // 許可設定の検証
-    if (!config.permissions?.permissions?.allow || !Array.isArray(config.permissions.permissions.allow)) {
+    if (
+      !config.permissions?.permissions?.allow ||
+      !Array.isArray(config.permissions.permissions.allow)
+    ) {
       throw new Error('許可リストが必要です');
     }
 
-    if (!config.permissions?.permissions?.deny || !Array.isArray(config.permissions.permissions.deny)) {
+    if (
+      !config.permissions?.permissions?.deny ||
+      !Array.isArray(config.permissions.permissions.deny)
+    ) {
       throw new Error('拒否リストが必要です');
     }
   }
 
-  private mergeConfig(base: RenkeiConfig, updates: DeepPartial<RenkeiConfig>): RenkeiConfig {
+  private mergeConfig(
+    base: RenkeiConfig,
+    updates: DeepPartial<RenkeiConfig>
+  ): RenkeiConfig {
     const result = { ...base };
 
     for (const [key, value] of Object.entries(updates)) {
       if (value !== undefined) {
-        if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+        if (
+          typeof value === 'object' &&
+          value !== null &&
+          !Array.isArray(value)
+        ) {
           (result as any)[key] = { ...(base as any)[key], ...value };
         } else {
           (result as any)[key] = value;
@@ -310,7 +333,7 @@ export class ConfigManager {
   private async ensureDirectories(): Promise<void> {
     const dirs = [
       path.dirname(this.userConfigPath),
-      path.dirname(this.defaultConfigPath)
+      path.dirname(this.defaultConfigPath),
     ];
 
     for (const dir of dirs) {

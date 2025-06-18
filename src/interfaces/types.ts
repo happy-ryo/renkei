@@ -134,7 +134,7 @@ export enum ErrorCode {
   PERMISSION_DENIED = 'PERMISSION_DENIED',
   CONFIG_ERROR = 'CONFIG_ERROR',
   FILE_ERROR = 'FILE_ERROR',
-  VALIDATION_ERROR = 'VALIDATION_ERROR'
+  VALIDATION_ERROR = 'VALIDATION_ERROR',
 }
 
 export class RenkeiError extends Error {
@@ -155,7 +155,8 @@ export type DeepPartial<T> = {
 
 export type RequiredFields<T, K extends keyof T> = T & Required<Pick<T, K>>;
 
-export type OptionalFields<T, K extends keyof T> = Omit<T, K> & Partial<Pick<T, K>>;
+export type OptionalFields<T, K extends keyof T> = Omit<T, K> &
+  Partial<Pick<T, K>>;
 
 // イベント関連の型
 export interface SystemEvent {
@@ -188,7 +189,10 @@ export interface SessionUpdateEvent extends SystemEvent {
   };
 }
 
-export type RenkeiEvent = TaskStartEvent | TaskCompleteEvent | SessionUpdateEvent;
+export type RenkeiEvent =
+  | TaskStartEvent
+  | TaskCompleteEvent
+  | SessionUpdateEvent;
 
 // 設定の型
 export interface UserPreferences {

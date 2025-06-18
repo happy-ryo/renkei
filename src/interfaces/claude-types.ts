@@ -169,7 +169,7 @@ export enum ClaudeErrorCode {
   RATE_LIMIT_EXCEEDED = 'RATE_LIMIT_EXCEEDED',
   INSUFFICIENT_CREDITS = 'INSUFFICIENT_CREDITS',
   NETWORK_ERROR = 'NETWORK_ERROR',
-  INTERNAL_ERROR = 'INTERNAL_ERROR'
+  INTERNAL_ERROR = 'INTERNAL_ERROR',
 }
 
 export class ClaudeCodeError extends Error {
@@ -219,14 +219,16 @@ export interface ClaudeErrorEvent extends ClaudeEvent {
   data: SDKError;
 }
 
-export type ClaudeEventType = 
-  | ClaudeTaskStartEvent 
-  | ClaudeProgressEvent 
-  | ClaudeTaskCompleteEvent 
+export type ClaudeEventType =
+  | ClaudeTaskStartEvent
+  | ClaudeProgressEvent
+  | ClaudeTaskCompleteEvent
   | ClaudeErrorEvent;
 
 // ClaudeCode ユーティリティ型
-export type ClaudeMessageHandler = (message: SDKMessage) => void | Promise<void>;
+export type ClaudeMessageHandler = (
+  message: SDKMessage
+) => void | Promise<void>;
 
 export type ClaudeProgressHandler = (progress: SDKProgress) => void;
 
