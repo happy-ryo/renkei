@@ -1,0 +1,29 @@
+{
+  "sessionId": "ab4ca200-912e-485e-9025-3de8b20cacf5",
+  "status": "completed",
+  "startTime": "2025-06-18T08:37:56.303Z",
+  "lastActivity": "2025-06-18T08:37:58.416Z",
+  "taskHistory": [],
+  "context": {
+    "workingDirectory": "/home/happy_ryo/work/renkei/workspace/test-e2e",
+    "environment": {},
+    "openFiles": [],
+    "currentTask": {
+      "id": "integration_task_1750235876308",
+      "userPrompt": "Test task for system integration",
+      "description": "Test task for system integration",
+      "workingDirectory": "/home/happy_ryo/work/renkei/workspace/test-e2e",
+      "priority": "medium",
+      "timestamp": "2025-06-18T08:37:58.386Z"
+    }
+  },
+  "metadata": {
+    "totalTasks": 0,
+    "successfulTasks": 0,
+    "failedTasks": 0,
+    "totalExecutionTime": 0,
+    "totalCost": 0
+  },
+  "lastSaved": "2025-06-18T08:37:58.418Z",
+  "version": "1.0"
+}

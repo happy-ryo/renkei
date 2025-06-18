@@ -10,7 +10,7 @@ import {
   SessionMetadata,
   RenkeiError,
   ErrorSeverity,
-} from '../interfaces/types.js';
+} from '../interfaces/types';
 
 /**
  * 永続化設定

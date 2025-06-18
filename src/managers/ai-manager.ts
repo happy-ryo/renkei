@@ -1,14 +1,14 @@
 import { EventEmitter } from 'events';
-import { ClaudeIntegration } from '../integrations/claude-integration.js';
-import { ConfigManager } from './config-manager.js';
-import { TaskEvaluator } from '../evaluators/task-evaluator.js';
+import { ClaudeIntegration } from '../integrations/claude-integration';
+import { ConfigManager } from './config-manager';
+import { TaskEvaluator } from '../evaluators/task-evaluator';
 import {
   TaskPlan,
   ExecutionResult,
   RiskAssessment,
   RenkeiError,
   ErrorSeverity,
-} from '../interfaces/types.js';
+} from '../interfaces/types';
 
 // AI Manager固有の型定義
 interface TaskRequest {

@@ -11,13 +11,13 @@ import {
   TaskRequest,
   RenkeiError,
   ErrorSeverity,
-} from '../interfaces/types.js';
+} from '../interfaces/types';
 import {
   SessionPersistence,
   PersistenceConfig,
   defaultPersistenceConfig,
   SessionHistoryEntry,
-} from '../utils/persistence.js';
+} from '../utils/persistence';
 
 /**
  * セッション管理設定

@@ -20,7 +20,7 @@ import {
   SDKResult,
   SDKError,
   SDKProgress,
-} from '../interfaces/claude-types.js';
+} from '../interfaces/claude-types';
 
 /**
  * ClaudeCode APIラッパークラス

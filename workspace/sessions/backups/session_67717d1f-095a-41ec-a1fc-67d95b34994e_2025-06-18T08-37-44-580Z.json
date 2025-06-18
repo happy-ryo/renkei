@@ -1,0 +1,19 @@
+{
+  "sessionId": "67717d1f-095a-41ec-a1fc-67d95b34994e",
+  "status": "active",
+  "startTime": "2025-06-18T08:37:44.581Z",
+  "lastActivity": "2025-06-18T08:37:44.581Z",
+  "taskHistory": [],
+  "context": {
+    "workingDirectory": "/home/happy_ryo/work/renkei",
+    "environment": {},
+    "openFiles": []
+  },
+  "metadata": {
+    "totalTasks": 0,
+    "successfulTasks": 0,
+    "failedTasks": 0,
+    "totalExecutionTime": 0,
+    "totalCost": 0
+  }
+}
