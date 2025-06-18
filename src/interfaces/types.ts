@@ -162,7 +162,7 @@ export enum ErrorSeverity {
   INFO = 'info',
   WARNING = 'warning',
   ERROR = 'error',
-  CRITICAL = 'critical'
+  CRITICAL = 'critical',
 }
 
 export class RenkeiError extends Error {
@@ -315,7 +315,7 @@ export enum TaskStatus {
   COMPLETED = 'completed',
   ERROR = 'error',
   STOPPING = 'stopping',
-  STOPPED = 'stopped'
+  STOPPED = 'stopped',
 }
 
 export enum AIManagerEvents {
@@ -334,5 +334,5 @@ export enum AIManagerEvents {
   EXECUTION_PAUSED = 'execution_paused',
   TASK_STOPPING = 'task_stopping',
   TASK_STOPPED = 'task_stopped',
-  ERROR = 'error'
+  ERROR = 'error',
 }

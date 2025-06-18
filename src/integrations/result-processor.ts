@@ -124,7 +124,7 @@ export class ResultProcessor extends EventEmitter {
       '**/*.tmp',
       '**/*.temp',
       '**/workspace/logs/**',
-      ...ignoredPaths || [],
+      ...(ignoredPaths || []),
     ];
 
     const watcher = watch(watchDirectory, {
@@ -139,7 +139,10 @@ export class ResultProcessor extends EventEmitter {
     let changeTimeout: ReturnType<typeof setTimeout> | null = null;
 
     // ファイル変更イベントのハンドリング
-    const handleChange = (eventType: 'created' | 'modified' | 'deleted', filePath: string) => {
+    const handleChange = (
+      eventType: 'created' | 'modified' | 'deleted',
+      filePath: string
+    ) => {
       changes.push({
         path: path.relative(watchDirectory, filePath),
         action: eventType,
@@ -151,7 +154,11 @@ export class ResultProcessor extends EventEmitter {
         clearTimeout(changeTimeout);
       }
       changeTimeout = setTimeout(async () => {
-        await this.processFileChanges(sessionId, changes.splice(0), watchDirectory);
+        await this.processFileChanges(
+          sessionId,
+          changes.splice(0),
+          watchDirectory
+        );
       }, 500);
     };
 
@@ -167,7 +174,10 @@ export class ResultProcessor extends EventEmitter {
       });
 
     this.watchers.set(sessionId, watcher);
-    this.emit('file_watching_started', { sessionId, directory: watchDirectory });
+    this.emit('file_watching_started', {
+      sessionId,
+      directory: watchDirectory,
+    });
   }
 
   /**
@@ -211,9 +221,9 @@ export class ResultProcessor extends EventEmitter {
       changes,
       timestamp: new Date(),
       summary: {
-        created: changes.filter(c => c.action === 'created').length,
-        modified: changes.filter(c => c.action === 'modified').length,
-        deleted: changes.filter(c => c.action === 'deleted').length,
+        created: changes.filter((c) => c.action === 'created').length,
+        modified: changes.filter((c) => c.action === 'modified').length,
+        deleted: changes.filter((c) => c.action === 'deleted').length,
         totalSize: changes.reduce((sum, c) => sum + (c.size || 0), 0),
       },
     };
@@ -250,7 +260,9 @@ export class ResultProcessor extends EventEmitter {
     for (const logLine of logs) {
       // コマンド実行の検出
       if (parseCommands) {
-        const commandMatch = logLine.match(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3}Z)?\s*\$\s+(.+)$/);
+        const commandMatch = logLine.match(
+          /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3}Z)?\s*\$\s+(.+)$/
+        );
         if (commandMatch && commandMatch[2]) {
           const [, timestampStr, command] = commandMatch;
           commands.push({
@@ -260,7 +272,9 @@ export class ResultProcessor extends EventEmitter {
         }
 
         // 終了コードの検出
-        const exitCodeMatch = logLine.match(/Command\s+.+\s+exited\s+with\s+code\s+(\d+)/);
+        const exitCodeMatch = logLine.match(
+          /Command\s+.+\s+exited\s+with\s+code\s+(\d+)/
+        );
         if (exitCodeMatch && exitCodeMatch[1] && commands.length > 0) {
           const lastCommand = commands[commands.length - 1];
           if (lastCommand) {
@@ -274,18 +288,24 @@ export class ResultProcessor extends EventEmitter {
         const errorPatterns = [
           { pattern: /error|ERROR/i, severity: 'error' as const },
           { pattern: /warning|WARNING|warn/i, severity: 'warning' as const },
-          { pattern: /critical|CRITICAL|fatal|FATAL/i, severity: 'critical' as const },
+          {
+            pattern: /critical|CRITICAL|fatal|FATAL/i,
+            severity: 'critical' as const,
+          },
         ];
 
         for (const { pattern, severity } of errorPatterns) {
           if (pattern.test(logLine)) {
-            const timestampMatch = extractTimestamps 
+            const timestampMatch = extractTimestamps
               ? logLine.match(/(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3}Z)/)
               : null;
-            
+
             errors.push({
               message: logLine.trim(),
-              timestamp: (timestampMatch && timestampMatch[1]) ? new Date(timestampMatch[1]) : new Date(),
+              timestamp:
+                timestampMatch && timestampMatch[1]
+                  ? new Date(timestampMatch[1])
+                  : new Date(),
               severity,
             });
             break;
@@ -300,8 +320,12 @@ export class ResultProcessor extends EventEmitter {
       errors,
       summary: {
         totalCommands: commands.length,
-        successfulCommands: commands.filter(c => c.exitCode === 0 || c.exitCode === undefined).length,
-        failedCommands: commands.filter(c => c.exitCode !== undefined && c.exitCode !== 0).length,
+        successfulCommands: commands.filter(
+          (c) => c.exitCode === 0 || c.exitCode === undefined
+        ).length,
+        failedCommands: commands.filter(
+          (c) => c.exitCode !== undefined && c.exitCode !== 0
+        ).length,
         totalErrors: errors.length,
       },
     };
@@ -322,7 +346,7 @@ export class ResultProcessor extends EventEmitter {
     this.ensureInitialized();
 
     const endTime = new Date();
-    const executionTime = startTime 
+    const executionTime = startTime
       ? endTime.getTime() - startTime.getTime()
       : 0;
 
@@ -331,7 +355,9 @@ export class ResultProcessor extends EventEmitter {
       executionTime,
       apiCalls: sdkResult.metrics?.apiCalls || 0,
       tokensUsed: sdkResult.metrics?.tokensUsed || 0,
-      ...(sdkResult.metrics?.cost !== undefined && { cost: sdkResult.metrics.cost }),
+      ...(sdkResult.metrics?.cost !== undefined && {
+        cost: sdkResult.metrics.cost,
+      }),
     };
 
     // システムリソース使用量を取得（Node.jsのprocess.memoryUsage()を使用）
@@ -399,21 +425,23 @@ export class ResultProcessor extends EventEmitter {
 
     // ファイル変更の処理
     if (includeFileChanges && result.files && result.files.length > 0) {
-      const changes: FileChange[] = result.files.map((sdkFile: SDKFileChange) => ({
-        path: sdkFile.path,
-        action: this.mapSDKActionToFileAction(sdkFile.action),
-        ...(sdkFile.content && { content: sdkFile.content }),
-        ...(sdkFile.size !== undefined && { size: sdkFile.size }),
-      }));
+      const changes: FileChange[] = result.files.map(
+        (sdkFile: SDKFileChange) => ({
+          path: sdkFile.path,
+          action: this.mapSDKActionToFileAction(sdkFile.action),
+          ...(sdkFile.content && { content: sdkFile.content }),
+          ...(sdkFile.size !== undefined && { size: sdkFile.size }),
+        })
+      );
 
       processedResult.fileChanges = {
         sessionId: result.sessionId,
         changes,
         timestamp: new Date(),
         summary: {
-          created: changes.filter(c => c.action === 'created').length,
-          modified: changes.filter(c => c.action === 'modified').length,
-          deleted: changes.filter(c => c.action === 'deleted').length,
+          created: changes.filter((c) => c.action === 'created').length,
+          modified: changes.filter((c) => c.action === 'modified').length,
+          deleted: changes.filter((c) => c.action === 'deleted').length,
           totalSize: changes.reduce((sum, c) => sum + (c.size || 0), 0),
         },
       };
@@ -421,7 +449,7 @@ export class ResultProcessor extends EventEmitter {
 
     // ログ解析
     if (analyzeLogs && result.output) {
-      const logs = result.output.split('\n').filter(line => line.trim());
+      const logs = result.output.split('\n').filter((line) => line.trim());
       processedResult.logAnalysis = await this.analyzeExecutionLogs(
         result.sessionId,
         logs
@@ -475,7 +503,7 @@ export class ResultProcessor extends EventEmitter {
   } {
     const logs = this.sessionLogs.get(sessionId);
     const metrics = this.sessionMetrics.get(sessionId);
-    
+
     return {
       ...(logs && { logs }),
       ...(metrics && { metrics }),

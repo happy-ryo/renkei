@@ -57,13 +57,12 @@ export class ClaudeIntegration extends EventEmitter {
     try {
       // ClaudeCodeが利用可能かチェック
       await this.checkClaudeCodeAvailability();
-      
+
       // 設定ファイルの準備
       await this.prepareSettingsFile();
-      
+
       this.isInitialized = true;
       this.emit('initialized');
-      
     } catch (error) {
       throw new ClaudeCodeError(
         ClaudeErrorCode.INTERNAL_ERROR,
@@ -79,7 +78,7 @@ export class ClaudeIntegration extends EventEmitter {
   private async checkClaudeCodeAvailability(): Promise<void> {
     return new Promise((resolve, reject) => {
       const process = spawn('claude', ['--version'], { stdio: 'pipe' });
-      
+
       let stderr = '';
       process.stderr?.on('data', (data) => {
         stderr += data.toString();
@@ -89,19 +88,23 @@ export class ClaudeIntegration extends EventEmitter {
         if (code === 0) {
           resolve();
         } else {
-          reject(new ClaudeCodeError(
-            ClaudeErrorCode.API_ERROR,
-            'ClaudeCodeが見つからないか、実行できません',
-            stderr
-          ));
+          reject(
+            new ClaudeCodeError(
+              ClaudeErrorCode.API_ERROR,
+              'ClaudeCodeが見つからないか、実行できません',
+              stderr
+            )
+          );
         }
       });
 
       process.on('error', (_error) => {
-        reject(new ClaudeCodeError(
-          ClaudeErrorCode.NETWORK_ERROR,
-          'ClaudeCodeプロセスの起動に失敗しました'
-        ));
+        reject(
+          new ClaudeCodeError(
+            ClaudeErrorCode.NETWORK_ERROR,
+            'ClaudeCodeプロセスの起動に失敗しました'
+          )
+        );
       });
     });
   }
@@ -112,11 +115,11 @@ export class ClaudeIntegration extends EventEmitter {
   private async prepareSettingsFile(): Promise<void> {
     const workspaceDir = process.cwd();
     const settingsPath = path.join(workspaceDir, 'workspace', 'settings.json');
-    
+
     try {
       // ワークスペースディレクトリを作成
       await fs.mkdir(path.dirname(settingsPath), { recursive: true });
-      
+
       // デフォルト設定を生成
       const defaultSettings: ClaudeCodeSettings = {
         permissions: {
@@ -151,7 +154,6 @@ export class ClaudeIntegration extends EventEmitter {
           'utf8'
         );
       }
-
     } catch (error) {
       throw new ClaudeCodeError(
         ClaudeErrorCode.INTERNAL_ERROR,
@@ -224,7 +226,7 @@ export class ClaudeIntegration extends EventEmitter {
 
     const session = this.getSession(sessionId);
     const taskId = `task_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    
+
     const task: ClaudeTaskExecution = {
       taskId,
       sessionId,
@@ -240,19 +242,18 @@ export class ClaudeIntegration extends EventEmitter {
     try {
       // タスク開始イベント
       this.emit('task_start', { taskId, sessionId, query });
-      
+
       // ClaudeCodeプロセスを起動
       const result = await this.runClaudeCodeProcess(task, handlers);
-      
+
       // タスク完了
       task.status = 'completed';
       task.result = result;
       session.lastActivity = new Date();
-      
-      this.emit('task_complete', { taskId, result });
-      
-      return taskId;
 
+      this.emit('task_complete', { taskId, result });
+
+      return taskId;
     } catch (error) {
       task.status = 'failed';
       if (error instanceof ClaudeCodeError) {
@@ -274,10 +275,9 @@ export class ClaudeIntegration extends EventEmitter {
           timestamp: new Date(),
         };
       }
-      
+
       this.emit('task_error', { taskId, error: task.error });
       throw error;
-      
     } finally {
       this.activeTasks.delete(taskId);
     }
@@ -291,10 +291,10 @@ export class ClaudeIntegration extends EventEmitter {
     handlers?: ClaudeHandlers
   ): Promise<SDKResult> {
     const session = this.getSession(task.sessionId);
-    
+
     return new Promise((resolve, reject) => {
       const args = this.buildClaudeCodeArgs(task);
-      
+
       this.claudeProcess = spawn('claude', args, {
         cwd: session.context.workingDirectory,
         stdio: 'pipe',
@@ -308,16 +308,18 @@ export class ClaudeIntegration extends EventEmitter {
       this.claudeProcess.stdout?.on('data', (data) => {
         const output = data.toString();
         stdout += output;
-        
+
         // メッセージを解析
         try {
-          const lines = output.split('\n').filter((line: string) => line.trim());
+          const lines = output
+            .split('\n')
+            .filter((line: string) => line.trim());
           for (const line of lines) {
             if (line.startsWith('{')) {
               const message = JSON.parse(line) as SDKMessage;
               messages.push(message);
               task.messages.push(message);
-              
+
               this.handleSDKMessage(message, handlers);
             }
           }
@@ -344,20 +346,24 @@ export class ClaudeIntegration extends EventEmitter {
           };
           resolve(result);
         } else {
-          reject(new ClaudeCodeError(
-            ClaudeErrorCode.API_ERROR,
-            `ClaudeCodeプロセスがエラーで終了しました (code: ${code})`,
-            stderr
-          ));
+          reject(
+            new ClaudeCodeError(
+              ClaudeErrorCode.API_ERROR,
+              `ClaudeCodeプロセスがエラーで終了しました (code: ${code})`,
+              stderr
+            )
+          );
         }
       });
 
       // プロセスエラー処理
       this.claudeProcess.on('error', (_error) => {
-        reject(new ClaudeCodeError(
-          ClaudeErrorCode.NETWORK_ERROR,
-          'ClaudeCodeプロセスでエラーが発生しました'
-        ));
+        reject(
+          new ClaudeCodeError(
+            ClaudeErrorCode.NETWORK_ERROR,
+            'ClaudeCodeプロセスでエラーが発生しました'
+          )
+        );
       });
 
       // タスクのプロンプトを送信
@@ -368,11 +374,13 @@ export class ClaudeIntegration extends EventEmitter {
       setTimeout(() => {
         if (this.claudeProcess && !this.claudeProcess.killed) {
           this.claudeProcess.kill();
-          reject(new ClaudeCodeError(
-            ClaudeErrorCode.TIMEOUT,
-            'ClaudeCodeタスクがタイムアウトしました',
-            `タイムアウト時間: ${task.options.timeout}ms`
-          ));
+          reject(
+            new ClaudeCodeError(
+              ClaudeErrorCode.TIMEOUT,
+              'ClaudeCodeタスクがタイムアウトしました',
+              `タイムアウト時間: ${task.options.timeout}ms`
+            )
+          );
         }
       }, task.options.timeout || this.config.timeout);
     });
@@ -383,26 +391,26 @@ export class ClaudeIntegration extends EventEmitter {
    */
   private buildClaudeCodeArgs(task: ClaudeTaskExecution): string[] {
     const args: string[] = [];
-    
+
     // 基本オプション
     args.push('--non-interactive');
-    
+
     if (task.options.outputFormat) {
       args.push(`--output-format=${task.options.outputFormat}`);
     }
-    
+
     if (task.options.maxTurns) {
       args.push(`--max-turns=${task.options.maxTurns}`);
     }
-    
+
     if (task.options.autoApprove) {
       args.push('--auto-approve');
     }
-    
+
     if (task.options.allowedTools) {
       args.push(`--allowed-tools=${task.options.allowedTools.join(',')}`);
     }
-    
+
     if (task.options.workingDirectory) {
       args.push(`--working-directory=${task.options.workingDirectory}`);
     }
@@ -413,7 +421,10 @@ export class ClaudeIntegration extends EventEmitter {
   /**
    * SDKメッセージを処理
    */
-  private handleSDKMessage(message: SDKMessage, handlers?: ClaudeHandlers): void {
+  private handleSDKMessage(
+    message: SDKMessage,
+    handlers?: ClaudeHandlers
+  ): void {
     // 基本ハンドラー
     if (handlers?.onMessage) {
       handlers.onMessage(message);
@@ -427,21 +438,21 @@ export class ClaudeIntegration extends EventEmitter {
         }
         this.emit('progress', message);
         break;
-        
+
       case 'error':
         if (handlers?.onError) {
           handlers.onError(message as SDKError);
         }
         this.emit('error', message);
         break;
-        
+
       case 'result':
         if (handlers?.onComplete) {
           handlers.onComplete(message as SDKResult);
         }
         this.emit('result', message);
         break;
-        
+
       case 'input_request':
         this.emit('input_request', message);
         break;
@@ -512,32 +523,35 @@ export class ClaudeIntegration extends EventEmitter {
   /**
    * メッセージを送信（AIManager用の簡易インターフェース）
    */
-  async sendMessage(prompt: string, sessionId?: string): Promise<{ content: string; duration?: number }> {
-    const targetSessionId = sessionId || await this.createSession();
-    
+  async sendMessage(
+    prompt: string,
+    sessionId?: string
+  ): Promise<{ content: string; duration?: number }> {
+    const targetSessionId = sessionId || (await this.createSession());
+
     const startTime = Date.now();
     const taskId = await this.executeTask(targetSessionId, {
       prompt,
       options: {
         maxTurns: 1,
         autoApprove: true,
-        outputFormat: 'text'
-      }
+        outputFormat: 'text',
+      },
     });
-    
+
     // タスク結果を取得
     const task = this.activeTasks.get(taskId);
     const duration = Date.now() - startTime;
-    
+
     if (task?.result) {
       return {
         content: task.result.output || '',
-        duration
+        duration,
       };
     } else {
       return {
         content: '',
-        duration
+        duration,
       };
     }
   }
@@ -549,7 +563,7 @@ export class ClaudeIntegration extends EventEmitter {
     if (this.claudeProcess && !this.claudeProcess.killed) {
       this.claudeProcess.kill();
     }
-    
+
     // 全てのアクティブタスクをキャンセル
     for (const taskId of this.activeTasks.keys()) {
       await this.cancelTask(taskId);

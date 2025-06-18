@@ -25,7 +25,7 @@ enum TaskStatus {
   COMPLETED = 'completed',
   ERROR = 'error',
   STOPPING = 'stopping',
-  STOPPED = 'stopped'
+  STOPPED = 'stopped',
 }
 
 enum AIManagerEvents {
@@ -44,7 +44,7 @@ enum AIManagerEvents {
   EXECUTION_PAUSED = 'execution_paused',
   TASK_STOPPING = 'task_stopping',
   TASK_STOPPED = 'task_stopped',
-  ERROR = 'error'
+  ERROR = 'error',
 }
 
 /**
@@ -81,26 +81,28 @@ export class AIManager extends EventEmitter {
       this.executionStatus = TaskStatus.ANALYZING;
 
       // 1. 自然言語解析
-      const analysis = await this.performNaturalLanguageAnalysis(request.description);
-      
+      const analysis = await this.performNaturalLanguageAnalysis(
+        request.description
+      );
+
       // 2. 実装計画生成
       const plan = await this.generateImplementationPlan(analysis, request);
-      
+
       // 3. リスク評価
       const riskAssessment = await this.assessRisks(plan);
-      
+
       // 計画の最終化
       const finalPlan: TaskPlan = {
         ...plan,
         riskAssessment,
         createdAt: new Date(),
         estimatedDuration: this.estimateTaskDuration(plan),
-        confidence: this.calculatePlanConfidence(plan, riskAssessment)
+        confidence: this.calculatePlanConfidence(plan, riskAssessment),
       };
 
       this.currentPlan = finalPlan;
       this.emit(AIManagerEvents.TASK_ANALYSIS_COMPLETED, finalPlan);
-      
+
       return finalPlan;
     } catch (error) {
       this.executionStatus = TaskStatus.ERROR;
@@ -142,7 +144,7 @@ export class AIManager extends EventEmitter {
 `;
 
     const result = await this.claude.sendMessage(analysisPrompt);
-    
+
     try {
       const analysis = JSON.parse(result.content);
       this.emit(AIManagerEvents.NATURAL_LANGUAGE_ANALYSIS_COMPLETED, analysis);
@@ -164,7 +166,12 @@ export class AIManager extends EventEmitter {
   private async generateImplementationPlan(
     analysis: any,
     request: TaskRequest
-  ): Promise<Omit<TaskPlan, 'riskAssessment' | 'createdAt' | 'estimatedDuration' | 'confidence'>> {
+  ): Promise<
+    Omit<
+      TaskPlan,
+      'riskAssessment' | 'createdAt' | 'estimatedDuration' | 'confidence'
+    >
+  > {
     const planningPrompt = `
 以下の解析結果に基づいて詳細な実装計画を作成してください：
 
@@ -210,7 +217,7 @@ export class AIManager extends EventEmitter {
 `;
 
     const result = await this.claude.sendMessage(planningPrompt);
-    
+
     try {
       const plan = JSON.parse(result.content);
       this.emit(AIManagerEvents.IMPLEMENTATION_PLAN_GENERATED, plan);
@@ -255,7 +262,7 @@ export class AIManager extends EventEmitter {
 `;
 
     const result = await this.claude.sendMessage(riskPrompt);
-    
+
     try {
       const riskAssessment = JSON.parse(result.content);
       this.emit(AIManagerEvents.RISK_ASSESSMENT_COMPLETED, riskAssessment);
@@ -278,38 +285,45 @@ export class AIManager extends EventEmitter {
     try {
       this.emit(AIManagerEvents.TASK_EXECUTION_STARTED, plan);
       this.executionStatus = TaskStatus.EXECUTING;
-      
+
       const startTime = Date.now();
       const results = [];
-      
+
       for (const phase of plan.phases) {
         this.emit(AIManagerEvents.PHASE_STARTED, phase);
-        
+
         const phaseResult = await this.executePhase(phase);
         results.push(phaseResult);
-        
+
         // 途中での品質チェック
-        const shouldContinue = await this.evaluateIntermediateProgress(phaseResult);
+        const shouldContinue =
+          await this.evaluateIntermediateProgress(phaseResult);
         if (!shouldContinue) {
-          this.emit(AIManagerEvents.EXECUTION_PAUSED, { phase, reason: 'Quality check failed' });
+          this.emit(AIManagerEvents.EXECUTION_PAUSED, {
+            phase,
+            reason: 'Quality check failed',
+          });
           break;
         }
-        
-        this.emit(AIManagerEvents.PHASE_COMPLETED, { phase, result: phaseResult });
+
+        this.emit(AIManagerEvents.PHASE_COMPLETED, {
+          phase,
+          result: phaseResult,
+        });
       }
-      
+
       const executionResult: ExecutionResult = {
         taskId: plan.id,
         success: true,
         duration: Date.now() - startTime,
         results,
         metrics: await this.evaluator.calculateMetrics(results),
-        completedAt: new Date()
+        completedAt: new Date(),
       };
-      
+
       this.executionStatus = TaskStatus.COMPLETED;
       this.emit(AIManagerEvents.TASK_EXECUTION_COMPLETED, executionResult);
-      
+
       return executionResult;
     } catch (error) {
       this.executionStatus = TaskStatus.ERROR;
@@ -330,26 +344,26 @@ export class AIManager extends EventEmitter {
    */
   private async executePhase(phase: any): Promise<any> {
     const phaseResults = [];
-    
+
     for (const step of phase.steps) {
       this.emit(AIManagerEvents.STEP_STARTED, step);
-      
+
       try {
         const stepResult = await this.executeStep(step);
         phaseResults.push(stepResult);
-        
+
         this.emit(AIManagerEvents.STEP_COMPLETED, { step, result: stepResult });
       } catch (error) {
         this.emit(AIManagerEvents.STEP_FAILED, { step, error });
         throw error;
       }
     }
-    
+
     return {
       phaseId: phase.id,
       success: true,
       results: phaseResults,
-      deliverables: phase.deliverables
+      deliverables: phase.deliverables,
     };
   }
 
@@ -360,13 +374,13 @@ export class AIManager extends EventEmitter {
   private async executeStep(step: any): Promise<any> {
     const instruction = this.generateClaudeInstruction(step);
     const result = await this.claude.sendMessage(instruction);
-    
+
     return {
       stepId: step.id,
       instruction,
       result: result.content,
       duration: result.duration || 0,
-      success: true
+      success: true,
     };
   }
 
@@ -424,7 +438,9 @@ ${step.content}`;
    * 中間進捗評価
    * 実行中の品質チェックと継続判断
    */
-  private async evaluateIntermediateProgress(phaseResult: any): Promise<boolean> {
+  private async evaluateIntermediateProgress(
+    phaseResult: any
+  ): Promise<boolean> {
     return await this.evaluator.shouldContinueExecution(phaseResult);
   }
 
@@ -447,17 +463,27 @@ ${step.content}`;
    */
   private estimateTaskDuration(plan: any): number {
     return plan.phases.reduce((total: number, phase: any) => {
-      return total + phase.steps.reduce((phaseTotal: number, step: any) => {
-        return phaseTotal + (parseInt(step.estimatedTime) || 5);
-      }, 0);
+      return (
+        total +
+        phase.steps.reduce((phaseTotal: number, step: any) => {
+          return phaseTotal + (parseInt(step.estimatedTime) || 5);
+        }, 0)
+      );
     }, 0);
   }
 
-  private calculatePlanConfidence(_plan: any, riskAssessment: RiskAssessment): number {
+  private calculatePlanConfidence(
+    _plan: any,
+    riskAssessment: RiskAssessment
+  ): number {
     const baseConfidence = 0.8;
-    const riskPenalty = riskAssessment.overall === 'HIGH' ? 0.3 : 
-                       riskAssessment.overall === 'MEDIUM' ? 0.15 : 0;
-    
+    const riskPenalty =
+      riskAssessment.overall === 'HIGH'
+        ? 0.3
+        : riskAssessment.overall === 'MEDIUM'
+          ? 0.15
+          : 0;
+
     return Math.max(0.1, baseConfidence - riskPenalty);
   }
 
@@ -472,7 +498,7 @@ ${step.content}`;
     return {
       currentTask: this.currentTask,
       currentPlan: this.currentPlan,
-      executionStatus: this.executionStatus
+      executionStatus: this.executionStatus,
     };
   }
 
@@ -483,10 +509,10 @@ ${step.content}`;
     if (this.executionStatus === TaskStatus.EXECUTING) {
       this.executionStatus = TaskStatus.STOPPING;
       this.emit(AIManagerEvents.TASK_STOPPING);
-      
+
       // Claude実行の停止
       await this.claude.stopCurrentExecution();
-      
+
       this.executionStatus = TaskStatus.STOPPED;
       this.emit(AIManagerEvents.TASK_STOPPED);
     }

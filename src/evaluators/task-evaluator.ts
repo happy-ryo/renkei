@@ -10,10 +10,12 @@ export class TaskEvaluator extends EventEmitter {
   private completenessThreshold: number;
   private performanceMetrics: Map<string, number> = new Map();
 
-  constructor(options: {
-    qualityThreshold?: number;
-    completenessThreshold?: number;
-  } = {}) {
+  constructor(
+    options: {
+      qualityThreshold?: number;
+      completenessThreshold?: number;
+    } = {}
+  ) {
     super();
     this.qualityThreshold = options.qualityThreshold || 0.7;
     this.completenessThreshold = options.completenessThreshold || 0.8;
@@ -26,27 +28,42 @@ export class TaskEvaluator extends EventEmitter {
     try {
       // 基本的な成功判定
       if (!phaseResult.success) {
-        this.emit('continue_evaluation', { phaseResult, decision: false, reason: 'Phase failed' });
+        this.emit('continue_evaluation', {
+          phaseResult,
+          decision: false,
+          reason: 'Phase failed',
+        });
         return false;
       }
 
       // エラー率チェック
       const errorRate = this.calculateErrorRate(phaseResult);
       if (errorRate > 0.3) {
-        this.emit('continue_evaluation', { phaseResult, decision: false, reason: 'High error rate' });
+        this.emit('continue_evaluation', {
+          phaseResult,
+          decision: false,
+          reason: 'High error rate',
+        });
         return false;
       }
 
       // 品質スコア評価
       const qualityScore = await this.evaluatePhaseQuality(phaseResult);
       if (qualityScore < this.qualityThreshold) {
-        this.emit('continue_evaluation', { phaseResult, decision: false, reason: 'Low quality score' });
+        this.emit('continue_evaluation', {
+          phaseResult,
+          decision: false,
+          reason: 'Low quality score',
+        });
         return false;
       }
 
-      this.emit('continue_evaluation', { phaseResult, decision: true, reason: 'Quality criteria met' });
+      this.emit('continue_evaluation', {
+        phaseResult,
+        decision: true,
+        reason: 'Quality criteria met',
+      });
       return true;
-
     } catch (error) {
       this.emit('evaluation_error', { error, phaseResult });
       // エラーが発生した場合は安全側に倒して停止
@@ -96,20 +113,33 @@ export class TaskEvaluator extends EventEmitter {
   }> {
     const quality = await this.calculateOverallQuality(executionResult);
     const completeness = this.calculateOverallCompleteness(executionResult);
-    const needsImprovement = quality < this.qualityThreshold || completeness < this.completenessThreshold;
-    
-    const improvements = await this.generateImprovementSuggestions(executionResult, quality, completeness);
-    const nextActions = await this.generateNextActions(executionResult, quality, completeness);
+    const needsImprovement =
+      quality < this.qualityThreshold ||
+      completeness < this.completenessThreshold;
+
+    const improvements = await this.generateImprovementSuggestions(
+      executionResult,
+      quality,
+      completeness
+    );
+    const nextActions = await this.generateNextActions(
+      executionResult,
+      quality,
+      completeness
+    );
 
     const evaluation = {
       quality,
       completeness,
       needsImprovement,
       improvements,
-      nextActions
+      nextActions,
     };
 
-    this.emit('task_evaluation_completed', { result: executionResult, evaluation });
+    this.emit('task_evaluation_completed', {
+      result: executionResult,
+      evaluation,
+    });
     return evaluation;
   }
 
@@ -135,7 +165,7 @@ export class TaskEvaluator extends EventEmitter {
       executionTime: totalDuration,
       apiCalls,
       tokensUsed,
-      cost: this.calculateCost(tokensUsed, apiCalls)
+      cost: this.calculateCost(tokensUsed, apiCalls),
     };
 
     this.emit('metrics_calculated', metrics);
@@ -151,7 +181,9 @@ export class TaskEvaluator extends EventEmitter {
       return 0;
     }
 
-    const errorCount = phaseResult.results.filter((result: any) => !result.success).length;
+    const errorCount = phaseResult.results.filter(
+      (result: any) => !result.success
+    ).length;
     return errorCount / phaseResult.results.length;
   }
 
@@ -160,7 +192,9 @@ export class TaskEvaluator extends EventEmitter {
       return 0;
     }
 
-    const successCount = phaseResult.results.filter((result: any) => result.success).length;
+    const successCount = phaseResult.results.filter(
+      (result: any) => result.success
+    ).length;
     return successCount / phaseResult.results.length;
   }
 
@@ -178,31 +212,33 @@ export class TaskEvaluator extends EventEmitter {
   private evaluatePerformance(phaseResult: any): number {
     const duration = phaseResult.duration || 0;
     const stepCount = phaseResult.results?.length || 1;
-    
+
     // 1ステップあたりの平均時間
     const avgTimePerStep = duration / stepCount;
-    
+
     // パフォーマンス評価（5秒/ステップを基準とする）
     const baselineTime = 5000; // 5秒
     const performanceScore = Math.min(1, baselineTime / avgTimePerStep);
-    
+
     return Math.max(0, performanceScore);
   }
 
   private async evaluateDeliverables(phaseResult: any): Promise<number> {
     // 成果物の品質を評価
     // 実際の実装では、ファイル内容の解析、構文チェック、テスト実行などを行う
-    
+
     if (!phaseResult.deliverables) {
       return 0.5;
     }
 
     // 基本的な評価（実際にはより詳細な分析が必要）
     let qualityScore = 0.7;
-    
+
     // エラーがあった場合は品質を下げる
     if (phaseResult.results) {
-      const hasErrors = phaseResult.results.some((result: any) => !result.success);
+      const hasErrors = phaseResult.results.some(
+        (result: any) => !result.success
+      );
       if (hasErrors) {
         qualityScore *= 0.8;
       }
@@ -211,7 +247,9 @@ export class TaskEvaluator extends EventEmitter {
     return qualityScore;
   }
 
-  private async calculateOverallQuality(result: ExecutionResult): Promise<number> {
+  private async calculateOverallQuality(
+    result: ExecutionResult
+  ): Promise<number> {
     if (!result.results || result.results.length === 0) {
       return 0;
     }
@@ -247,7 +285,9 @@ export class TaskEvaluator extends EventEmitter {
     const suggestions: string[] = [];
 
     if (quality < 0.7) {
-      suggestions.push('コード品質の向上: より詳細なエラーハンドリングと入力検証を追加');
+      suggestions.push(
+        'コード品質の向上: より詳細なエラーハンドリングと入力検証を追加'
+      );
       suggestions.push('テストカバレッジの改善: 単体テストと統合テストの追加');
     }
 
@@ -256,7 +296,8 @@ export class TaskEvaluator extends EventEmitter {
       suggestions.push('ドキュメント整備: API仕様書とユーザーガイドの充実');
     }
 
-    if (_executionResult.duration > 300000) { // 5分以上
+    if (_executionResult.duration > 300000) {
+      // 5分以上
       suggestions.push('パフォーマンス最適化: 実行時間の短縮');
       suggestions.push('処理の並列化: 非同期処理の活用');
     }
@@ -313,7 +354,7 @@ export class TaskEvaluator extends EventEmitter {
 
   private countErrors(result: ExecutionResult): number {
     if (!result.results) return 0;
-    
+
     return result.results.reduce((count, phaseResult) => {
       if (!phaseResult.results) return count;
       return count + phaseResult.results.filter((r: any) => !r.success).length;
@@ -333,10 +374,10 @@ export class TaskEvaluator extends EventEmitter {
   updateThresholds(quality: number, completeness: number): void {
     this.qualityThreshold = Math.max(0, Math.min(1, quality));
     this.completenessThreshold = Math.max(0, Math.min(1, completeness));
-    
+
     this.emit('thresholds_updated', {
       qualityThreshold: this.qualityThreshold,
-      completenessThreshold: this.completenessThreshold
+      completenessThreshold: this.completenessThreshold,
     });
   }
 
