@@ -127,7 +127,13 @@ When starting new work (bug fixes, features, or any modifications), always follo
    - Work on your branch and commit changes appropriately
    - Write clear commit messages describing the changes
 
-3. **Create Pull Request**
+3. **CRITICAL: Check for uncommitted changes before creating PR**
+   - **Always run `git status` to check for uncommitted changes**
+   - **Review ALL modified files with `git diff` before committing**
+   - **Never create a PR without verifying all intended changes are committed**
+   - If formatter or linter made changes during commit hooks, review and include them
+
+4. **Create Pull Request**
    - After completing work, create a PR if needed
    - Ensure review before merging to main branch
 
@@ -136,9 +142,23 @@ Example:
 git checkout -b fix/tmux-pane-error
 # Make your changes
 git add .
+# CRITICAL: Check what will be committed
+git status
+git diff --cached
+# Review any unstaged changes
+git diff
+# If there are unstaged changes, decide whether to include them
 git commit -m "fix: resolve tmux pane identification issue"
 git push origin fix/tmux-pane-error
 ```
+
+### Pre-PR Checklist
+Before creating any PR, ALWAYS:
+1. Run `git status` - ensure no untracked or modified files remain
+2. Run `git diff` - review any unstaged changes
+3. Run `git diff --cached` - review staged changes
+4. Ensure all intended changes are included in commits
+5. Check if formatters/linters modified files during commit
 
 ## Common Development Tasks
 
