@@ -292,9 +292,10 @@ function startSystem(config, sessionInfo) {
     // チャットペインの初期化（チャットペインが存在する場合）
     if (chatPaneId) {
       logInfo(`Initializing chat pane: ${chatPaneId}`);
-      const chatCommand = `echo "💬 Interactive Chat Interface" && echo "Initializing chat system..." && echo "Type 'help' for available commands" && echo "Chat pane is ready for future implementation"`;
+      // チャットCLIを起動
+      const chatCommand = `node dist/chat-cli.js`;
       execSync(`tmux send-keys -t ${chatPaneId} "${chatCommand}" Enter`, { stdio: 'pipe' });
-      logSuccess('Chat interface initialized');
+      logSuccess('Chat interface started');
     }
     
     logSuccess('System startup commands sent to tmux session');
