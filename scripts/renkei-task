@@ -1,0 +1,464 @@
+#!/usr/bin/env node
+
+/**
+ * Renkei System - タスク実行スクリプト
+ * 統括AIにタスクを指示するためのコマンドラインツール
+ */
+
+const { RenkeiSystem } = require('../dist/index.js');
+
+// Chalk v5はESMなので、CommonJSで簡易的に色付けを実装
+const chalk = {
+  blue: (text) => `\x1b[34m${text}\x1b[0m`,
+  green: (text) => `\x1b[32m${text}\x1b[0m`,
+  yellow: (text) => `\x1b[33m${text}\x1b[0m`,
+  red: (text) => `\x1b[31m${text}\x1b[0m`,
+  gray: (text) => `\x1b[90m${text}\x1b[0m`
+};
+
+// Bold versions
+chalk.blue.bold = (text) => `\x1b[1m\x1b[34m${text}\x1b[0m`;
+chalk.green.bold = (text) => `\x1b[1m\x1b[32m${text}\x1b[0m`;
+chalk.red.bold = (text) => `\x1b[1m\x1b[31m${text}\x1b[0m`;
+
+// コマンドライン引数の解析
+function parseArguments() {
+  const args = process.argv.slice(2);
+  
+  if (args.length === 0) {
+    showHelp();
+    process.exit(1);
+  }
+
+  const command = args[0];
+  const taskDescription = args.slice(1).join(' ');
+
+  return { command, taskDescription };
+}
+
+// ヘルプ表示
+function showHelp() {
+  console.log(chalk.blue.bold('🤖 Renkei Task - AI指示ツール'));
+  console.log('');
+  console.log('使用方法:');
+  console.log('  scripts/renkei-task <指示内容>');
+  console.log('');
+  console.log('例:');
+  console.log('  scripts/renkei-task "READMEファイルを作成して"');
+  console.log('  scripts/renkei-task "package.jsonを確認してください"');
+  console.log('  scripts/renkei-task "テストファイルを作成してください"');
+  console.log('');
+  console.log('特別なコマンド:');
+  console.log('  scripts/renkei-task status    - システム状態を表示');
+  console.log('  scripts/renkei-task help      - このヘルプを表示');
+}
+
+// 実際のClaude AI統合タスク処理システム
+async function executeTask(taskDescription) {
+  try {
+    console.log(chalk.blue.bold('🤖 Renkei System - 統括AI でタスクを実行しています...'));
+    console.log('');
+    console.log(chalk.blue('📝 受け付けたタスク:'));
+    console.log(chalk.gray(`   ${taskDescription}`));
+    console.log('');
+
+    // プロジェクトコンテキストの収集
+    console.log(chalk.blue('🔍 プロジェクトコンテキストを収集しています...'));
+    const { claudeAPI, projectContextCollector } = require('../dist/integrations/claude-api.js');
+    
+    const projectContext = await projectContextCollector.collectContext();
+    console.log(chalk.gray(`   プロジェクト: ${projectContext.projectName} (${projectContext.language})`));
+    console.log(chalk.gray(`   フレームワーク: ${projectContext.frameworks.join(', ') || 'なし'}`));
+
+    // Claude AIでタスク解析・実行計画
+    console.log(chalk.blue('🧠 Claude AI がタスクを解析しています...'));
+    
+    const claudeResponse = await claudeAPI.executeTaskWithContext(taskDescription, projectContext);
+    
+    console.log(chalk.green.bold('\n✅ Claude AI による解析が完了しました！'));
+    console.log('');
+    console.log(chalk.blue('🔧 実行計画:'));
+    console.log(chalk.gray(claudeResponse.content));
+    
+    // 実際のタスク実行の試行
+    console.log('');
+    console.log(chalk.blue('⚡ 実行可能な部分を処理しています...'));
+    const executionResult = await tryExecuteClaudeInstructions(claudeResponse.content);
+    
+    console.log('');
+    console.log(chalk.green.bold('🎉 タスク処理が完了しました！'));
+    
+    // トークン使用量表示
+    if (claudeResponse.usage) {
+      console.log('');
+      console.log(chalk.gray(`📊 AI使用量: 入力${claudeResponse.usage.input_tokens}、出力${claudeResponse.usage.output_tokens}トークン`));
+    }
+    
+    return `Claude AI解析完了\n実行結果: ${executionResult}`;
+    
+  } catch (error) {
+    // Claude API が利用できない場合のフォールバック
+    if (error.message.includes('Claude API key is not configured')) {
+      console.log(chalk.yellow('⚠️  Claude API未設定。ルールベース処理にフォールバックします...'));
+      return await analyzeAndExecuteTask(taskDescription);
+    }
+    
+    console.error(chalk.red.bold('❌ AI統合タスク実行エラー:'), error.message);
+    throw error;
+  }
+}
+
+// Claude AIの指示を実際に実行する試行
+async function tryExecuteClaudeInstructions(claudeInstructions) {
+  try {
+    // Claude の回答からコマンドやアクションを抽出して実行
+    const fs = require('fs');
+    const { execSync } = require('child_process');
+    
+    const results = [];
+    
+    // ファイル作成の指示を検出
+    const fileCreationRegex = /ファイル[^\n]*作成[^\n]*[:：]\s*([^\n]+)/gi;
+    const fileMatches = claudeInstructions.match(fileCreationRegex);
+    if (fileMatches) {
+      results.push('ファイル作成指示を検出しました');
+    }
+    
+    // コマンド実行の指示を検出
+    const commandRegex = /```(?:bash|sh|shell|cmd)\n([^`]+)\n```/gi;
+    let commandMatch;
+    while ((commandMatch = commandRegex.exec(claudeInstructions)) !== null) {
+      const command = commandMatch[1].trim();
+      try {
+        console.log(chalk.blue(`  🔧 実行: ${command}`));
+        const output = execSync(command, { encoding: 'utf8', timeout: 10000 });
+        results.push(`コマンド実行成功: ${command}`);
+      } catch (error) {
+        results.push(`コマンド実行失敗: ${command} (${error.message})`);
+      }
+    }
+    
+    // コードブロックの検出（TypeScript/JavaScript）
+    const codeRegex = /```(?:typescript|ts|javascript|js)\n([^`]+)\n```/gi;
+    let codeMatch;
+    while ((codeMatch = codeRegex.exec(claudeInstructions)) !== null) {
+      results.push('コード例を検出しました');
+    }
+    
+    if (results.length === 0) {
+      return 'Claude AIによる詳細な解析と指示を提供しました';
+    }
+    
+    return results.join(', ');
+    
+  } catch (error) {
+    return `実行処理中にエラー: ${error.message}`;
+  }
+}
+
+// タスク解析・実行エンジン
+async function analyzeAndExecuteTask(description) {
+  const fs = require('fs');
+  const path = require('path');
+  const { execSync } = require('child_process');
+  
+  // タスクの内容を解析
+  const lowerDesc = description.toLowerCase();
+  
+  try {
+    // ファイル作成タスク
+    if (lowerDesc.includes('readme') || lowerDesc.includes('ファイル') && lowerDesc.includes('作成')) {
+      if (lowerDesc.includes('readme')) {
+        return await createReadmeFile();
+      } else {
+        return await createGenericFile(description);
+      }
+    }
+    
+    // ファイル確認タスク
+    else if (lowerDesc.includes('確認') || lowerDesc.includes('チェック') || lowerDesc.includes('見る')) {
+      if (lowerDesc.includes('package.json')) {
+        return await checkPackageJson();
+      } else {
+        return await listProjectFiles();
+      }
+    }
+    
+    // テスト実行タスク
+    else if (lowerDesc.includes('テスト') || lowerDesc.includes('test')) {
+      return await runTests();
+    }
+    
+    // ビルドタスク
+    else if (lowerDesc.includes('ビルド') || lowerDesc.includes('build')) {
+      return await buildProject();
+    }
+    
+    // Git状態確認
+    else if (lowerDesc.includes('git') || lowerDesc.includes('状態')) {
+      return await checkGitStatus();
+    }
+    
+    // システム情報
+    else if (lowerDesc.includes('システム') || lowerDesc.includes('情報')) {
+      return await getSystemInfo();
+    }
+    
+    // デフォルト: 汎用的な応答
+    else {
+      return await handleGenericTask(description);
+    }
+    
+  } catch (error) {
+    return `タスク実行中にエラーが発生しました: ${error.message}`;
+  }
+}
+
+// 具体的なタスク実行関数群
+async function createReadmeFile() {
+  const fs = require('fs');
+  
+  const readmeContent = `# Renkei System
+
+AI協調開発環境 - tmuxベースの統括AI・workerシステム
+
+## 概要
+RenkeiはAIを活用した開発支援システムです。統括AIとworkerプロセスが協調して、開発タスクを効率的に処理します。
+
+## 使用方法
+
+### システム起動
+\`\`\`bash
+./scripts/renkei-start
+\`\`\`
+
+### タスク実行
+\`\`\`bash
+./scripts/renkei-task "指示内容"
+\`\`\`
+
+### システム停止
+\`\`\`bash
+./scripts/renkei-stop
+\`\`\`
+
+## 特徴
+- tmuxベースのリアルタイム監視
+- 統括AI・workerプロセス管理
+- セッション管理・復元機能
+- コマンドライン統合
+
+Generated by Renkei AI System - ${new Date().toISOString()}
+`;
+
+  try {
+    fs.writeFileSync('README-generated.md', readmeContent);
+    return 'README-generated.md ファイルを作成しました。プロジェクトの概要と使用方法を記述しています。';
+  } catch (error) {
+    throw new Error(`README作成エラー: ${error.message}`);
+  }
+}
+
+async function checkPackageJson() {
+  const fs = require('fs');
+  
+  try {
+    if (!fs.existsSync('package.json')) {
+      return 'package.json が見つかりません。';
+    }
+    
+    const packageData = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+    
+    const analysis = [
+      `プロジェクト名: ${packageData.name}`,
+      `バージョン: ${packageData.version}`,
+      `説明: ${packageData.description || '未設定'}`,
+      `依存関係数: ${Object.keys(packageData.dependencies || {}).length}個`,
+      `開発依存関係数: ${Object.keys(packageData.devDependencies || {}).length}個`,
+      `主要スクリプト: ${Object.keys(packageData.scripts || {}).join(', ')}`
+    ];
+    
+    return analysis.join('\n   ');
+  } catch (error) {
+    throw new Error(`package.json 解析エラー: ${error.message}`);
+  }
+}
+
+async function listProjectFiles() {
+  const fs = require('fs');
+  const path = require('path');
+  
+  try {
+    const files = fs.readdirSync('.').filter(file => {
+      return !file.startsWith('.') && !['node_modules', 'dist', 'coverage'].includes(file);
+    });
+    
+    const dirs = files.filter(file => fs.statSync(file).isDirectory());
+    const regularFiles = files.filter(file => fs.statSync(file).isFile());
+    
+    const result = [
+      `プロジェクトファイル構造:`,
+      `ディレクトリ (${dirs.length}個): ${dirs.join(', ')}`,
+      `ファイル (${regularFiles.length}個): ${regularFiles.slice(0, 10).join(', ')}${regularFiles.length > 10 ? '...' : ''}`
+    ];
+    
+    return result.join('\n   ');
+  } catch (error) {
+    throw new Error(`ファイル一覧取得エラー: ${error.message}`);
+  }
+}
+
+async function runTests() {
+  const { execSync } = require('child_process');
+  
+  try {
+    const output = execSync('npm test', { encoding: 'utf8', timeout: 10000 });
+    return `テスト実行完了:\n   ${output.split('\n').slice(-5).join('\n   ')}`;
+  } catch (error) {
+    return `テスト実行結果: ${error.message.includes('No tests found') ? 'テストファイルが見つかりません' : 'テストでエラーが発生しました'}`;
+  }
+}
+
+async function buildProject() {
+  const { execSync } = require('child_process');
+  
+  try {
+    const output = execSync('npm run build', { encoding: 'utf8', timeout: 30000 });
+    return 'プロジェクトのビルドが正常に完了しました。';
+  } catch (error) {
+    throw new Error(`ビルドエラー: ${error.message}`);
+  }
+}
+
+async function checkGitStatus() {
+  const { execSync } = require('child_process');
+  
+  try {
+    const status = execSync('git status --porcelain', { encoding: 'utf8' });
+    const branch = execSync('git branch --show-current', { encoding: 'utf8' }).trim();
+    
+    if (status.trim() === '') {
+      return `Git状態: ブランチ '${branch}' - 変更なし（クリーン）`;
+    } else {
+      const changes = status.split('\n').filter(line => line.trim()).length;
+      return `Git状態: ブランチ '${branch}' - ${changes}個のファイルに変更があります`;
+    }
+  } catch (error) {
+    return 'Gitリポジトリではないか、Gitコマンドでエラーが発生しました。';
+  }
+}
+
+async function getSystemInfo() {
+  const os = require('os');
+  const { execSync } = require('child_process');
+  
+  try {
+    const nodeVersion = process.version;
+    const platform = os.platform();
+    const arch = os.arch();
+    const memory = Math.round(os.totalmem() / 1024 / 1024 / 1024);
+    
+    let tmuxVersion = '未検出';
+    try {
+      tmuxVersion = execSync('tmux -V', { encoding: 'utf8' }).trim();
+    } catch {}
+    
+    const info = [
+      `プラットフォーム: ${platform} (${arch})`,
+      `Node.js: ${nodeVersion}`,
+      `tmux: ${tmuxVersion}`,
+      `メモリ: ${memory}GB`,
+      `Renkei System: 動作中`
+    ];
+    
+    return info.join('\n   ');
+  } catch (error) {
+    throw new Error(`システム情報取得エラー: ${error.message}`);
+  }
+}
+
+async function createGenericFile(description) {
+  return `ファイル作成タスクを解析しましたが、具体的なファイル名が不明です。'scripts/renkei-task "README作成"' のようにより具体的に指示してください。`;
+}
+
+async function handleGenericTask(description) {
+  const suggestions = [
+    '"README作成" - プロジェクトのREADMEファイルを作成',
+    '"package.json確認" - package.jsonの内容を解析',
+    '"ファイル確認" - プロジェクトファイル一覧を表示',
+    '"テスト実行" - npmテストを実行',
+    '"ビルド実行" - プロジェクトをビルド',
+    '"Git状態確認" - Gitリポジトリの状態を確認',
+    '"システム情報" - システム情報を表示'
+  ];
+  
+  return `指示を解析しましたが、具体的なアクションが特定できませんでした。\n\n利用可能なタスクの例:\n   ${suggestions.join('\n   ')}\n\nより具体的な指示をお試しください。`;
+}
+
+// システム状態の表示
+async function showStatus() {
+  try {
+    console.log(chalk.blue.bold('📊 Renkei System 状態確認'));
+    console.log('');
+    
+    // tmuxセッションの確認
+    const { execSync } = require('child_process');
+    
+    try {
+      execSync('tmux has-session -t renkei', { stdio: 'pipe' });
+      console.log(chalk.green('✅ tmux session "renkei" - 実行中'));
+      
+      // セッション情報の取得
+      const sessionInfo = execSync('tmux list-sessions -F "#{session_name}: #{session_windows} windows, created #{session_created}"', { encoding: 'utf8' });
+      console.log(chalk.gray(`   ${sessionInfo.trim()}`));
+      
+    } catch (error) {
+      console.log(chalk.red('❌ tmux session "renkei" - 停止中'));
+      console.log(chalk.yellow('💡 システムを起動するには: ./scripts/renkei-start'));
+    }
+    
+    console.log('');
+    console.log(chalk.blue('📋 利用可能なコマンド:'));
+    console.log(chalk.gray('   scripts/renkei-task "<指示>"  - タスクを実行'));
+    console.log(chalk.gray('   scripts/renkei-task status    - 状態確認'));
+    console.log(chalk.gray('   scripts/renkei-task help      - ヘルプ表示'));
+    console.log(chalk.gray('   ./scripts/renkei-start        - システム起動'));
+    console.log(chalk.gray('   ./scripts/renkei-stop         - システム停止'));
+    
+  } catch (error) {
+    console.error(chalk.red.bold('❌ 状態確認エラー:'), error.message);
+  }
+}
+
+// メイン処理
+async function main() {
+  const { command, taskDescription } = parseArguments();
+  
+  try {
+    switch (command) {
+      case 'help':
+      case '--help':
+      case '-h':
+        showHelp();
+        break;
+        
+      case 'status':
+        await showStatus();
+        break;
+        
+      default:
+        // コマンド + 残りの引数をタスク記述として扱う
+        const fullTaskDescription = [command, taskDescription].filter(Boolean).join(' ');
+        await executeTask(fullTaskDescription);
+        break;
+    }
+  } catch (error) {
+    console.error(chalk.red.bold('❌ エラーが発生しました:'), error.message);
+    process.exit(1);
+  }
+}
+
+// スクリプト実行
+if (require.main === module) {
+  main();
+}

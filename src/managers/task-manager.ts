@@ -1,12 +1,16 @@
 /**
  * Task Manager - タスク実行・評価システムの中核
- * 
+ *
  * AI管理者からのタスクを受け取り、実行制御、監視、評価を行う
  * 継続判断システムと連携してタスクの完了まで自動管理します。
  */
 
 import { EventEmitter } from 'events';
-import { QualityEvaluator, EvaluationResult, createQualityEvaluator } from '../evaluators/quality-evaluator';
+import {
+  QualityEvaluator,
+  EvaluationResult,
+  createQualityEvaluator,
+} from '../evaluators/quality-evaluator';
 import { ClaudeIntegration } from '../integrations/claude-integration';
 import { AIManager } from './ai-manager';
 import { ConfigManager } from './config-manager';
@@ -14,14 +18,14 @@ import { ConfigManager } from './config-manager';
 /**
  * タスク実行状態
  */
-export type TaskStatus = 
-  | 'pending'     // 待機中
-  | 'planning'    // 計画中
-  | 'executing'   // 実行中
-  | 'evaluating'  // 評価中
-  | 'completed'   // 完了
-  | 'failed'      // 失敗
-  | 'cancelled';  // キャンセル
+export type TaskStatus =
+  | 'pending' // 待機中
+  | 'planning' // 計画中
+  | 'executing' // 実行中
+  | 'evaluating' // 評価中
+  | 'completed' // 完了
+  | 'failed' // 失敗
+  | 'cancelled'; // キャンセル
 
 /**
  * タスク定義
@@ -142,14 +146,14 @@ export interface TaskManagerConfig {
 
 /**
  * タスクマネージャー
- * 
+ *
  * タスクの実行、監視、評価、継続判断を自動化する中核システム
  */
 export class TaskManager extends EventEmitter {
   private config: TaskManagerConfig;
   private claudeIntegration: ClaudeIntegration;
   private qualityEvaluator: QualityEvaluator;
-  
+
   private activeTasks = new Map<string, TaskContext>();
   private taskQueue: Task[] = [];
   private isProcessing = false;
@@ -163,7 +167,7 @@ export class TaskManager extends EventEmitter {
     super();
     this.config = config;
     this.claudeIntegration = claudeIntegration;
-    
+
     // 品質評価器を初期化
     this.qualityEvaluator = createQualityEvaluator({
       projectPath: configManager.getConfig().workspaceDir,
@@ -178,10 +182,10 @@ export class TaskManager extends EventEmitter {
   async addTask(task: Task): Promise<void> {
     // 依存関係チェック
     if (task.dependencies?.length) {
-      const unmetDependencies = task.dependencies.filter(depId => 
-        !this.isTaskCompleted(depId)
+      const unmetDependencies = task.dependencies.filter(
+        (depId) => !this.isTaskCompleted(depId)
       );
-      
+
       if (unmetDependencies.length > 0) {
         throw new Error(`Unmet dependencies: ${unmetDependencies.join(', ')}`);
       }
@@ -189,7 +193,7 @@ export class TaskManager extends EventEmitter {
 
     this.taskQueue.push(task);
     this.emit('taskQueued', { task });
-    
+
     if (!this.isProcessing) {
       await this.processNextTask();
     }
@@ -254,7 +258,6 @@ export class TaskManager extends EventEmitter {
 
       this.emit('taskCompleted', { context });
       return context;
-
     } catch (error) {
       context.status = 'failed';
       context.endTime = new Date();
@@ -264,7 +267,7 @@ export class TaskManager extends EventEmitter {
         severity: 'critical',
         message: error instanceof Error ? error.message : 'Unknown error',
       });
-      
+
       this.emit('taskFailed', { context, error });
       throw error;
     }
@@ -306,20 +309,22 @@ export class TaskManager extends EventEmitter {
       }
 
       // 4. 継続判断
-      iteration.decision = await this.makeContinuationDecision(context, iteration);
+      iteration.decision = await this.makeContinuationDecision(
+        context,
+        iteration
+      );
 
       iteration.endTime = new Date();
       this.emit('iterationCompleted', { context, iteration });
 
       return iteration;
-
     } catch (error) {
       iteration.decision = {
         decision: 'abort',
         confidence: 1,
         reasoning: `Iteration failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
       };
-      
+
       this.emit('iterationFailed', { context, iteration, error });
       return iteration;
     }
@@ -330,20 +335,25 @@ export class TaskManager extends EventEmitter {
    */
   private async generateExecutionPlan(context: TaskContext): Promise<string> {
     const prompt = this.buildPlanningPrompt(context);
-    
+
     try {
       // ClaudeIntegrationを使用して計画を生成
       const response = await this.claudeIntegration.sendMessage(prompt);
       return response.content;
     } catch (error) {
-      throw new Error(`Failed to generate execution plan: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      throw new Error(
+        `Failed to generate execution plan: ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
     }
   }
 
   /**
    * 実行ステップの処理
    */
-  private async executeSteps(context: TaskContext, plan: string): Promise<ExecutionStep[]> {
+  private async executeSteps(
+    context: TaskContext,
+    plan: string
+  ): Promise<ExecutionStep[]> {
     const steps = this.parsePlanIntoSteps(plan);
     const executedSteps: ExecutionStep[] = [];
 
@@ -351,7 +361,7 @@ export class TaskManager extends EventEmitter {
       try {
         step.startTime = new Date();
         step.status = 'running';
-        
+
         this.emit('stepStarted', { context, step });
 
         // Claude Codeでステップを実行
@@ -361,9 +371,9 @@ export class TaskManager extends EventEmitter {
           options: {
             maxTurns: 1,
             autoApprove: true,
-          }
+          },
         });
-        
+
         step.output = `Task ${taskId} executed`;
         step.artifacts = [];
         step.status = 'completed';
@@ -373,12 +383,11 @@ export class TaskManager extends EventEmitter {
         this.updateMetrics(context, { taskId });
 
         this.emit('stepCompleted', { context, step });
-
       } catch (error) {
         step.status = 'failed';
         step.endTime = new Date();
         step.output = error instanceof Error ? error.message : 'Unknown error';
-        
+
         this.emit('stepFailed', { context, step, error });
       }
 
@@ -395,7 +404,9 @@ export class TaskManager extends EventEmitter {
     try {
       return await this.qualityEvaluator.evaluate();
     } catch (error) {
-      throw new Error(`Progress evaluation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      throw new Error(
+        `Progress evaluation failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
     }
   }
 
@@ -403,10 +414,9 @@ export class TaskManager extends EventEmitter {
    * 継続判断
    */
   private async makeContinuationDecision(
-    context: TaskContext, 
+    context: TaskContext,
     iteration: TaskIteration
   ): Promise<ContinuationDecision> {
-    
     // 受け入れ基準チェック
     const acceptanceMet = await this.checkAcceptanceCriteria(context);
     if (acceptanceMet.allMet) {
@@ -488,8 +498,10 @@ export class TaskManager extends EventEmitter {
     }
 
     const allMet = metCount === context.task.acceptanceCriteria.length;
-    const confidence = context.task.acceptanceCriteria.length > 0 ? 
-      metCount / context.task.acceptanceCriteria.length : 1;
+    const confidence =
+      context.task.acceptanceCriteria.length > 0
+        ? metCount / context.task.acceptanceCriteria.length
+        : 1;
 
     return { allMet, confidence, details };
   }
@@ -508,9 +520,9 @@ export class TaskManager extends EventEmitter {
     try {
       const context = this.createTaskContext(task);
       this.activeTasks.set(task.id, context);
-      
+
       await this.executeTask(task.id);
-      
+
       // 次のタスクを処理
       if (this.taskQueue.length > 0) {
         setImmediate(() => this.processNextTask());
@@ -576,7 +588,7 @@ Generate a detailed execution plan for the next iteration.
 
   private parsePlanIntoSteps(plan: string): ExecutionStep[] {
     // 計画を実行可能なステップに分解
-    const lines = plan.split('\n').filter(line => line.trim());
+    const lines = plan.split('\n').filter((line) => line.trim());
     return lines.map((line, index) => ({
       id: `step_${index}`,
       type: this.determineStepType(line),
@@ -628,24 +640,28 @@ Generate a detailed execution plan for the next iteration.
 
   private isProgressStagnant(context: TaskContext): boolean {
     if (context.iterations.length < 3) return false;
-    
+
     const recentIterations = context.iterations.slice(-3);
-    const progressChanges = recentIterations.map(iter => 
-      iter.evaluation?.metrics.overall.score || 0
+    const progressChanges = recentIterations.map(
+      (iter) => iter.evaluation?.metrics.overall.score || 0
     );
-    
-    const maxChange = Math.max(...progressChanges) - Math.min(...progressChanges);
+
+    const maxChange =
+      Math.max(...progressChanges) - Math.min(...progressChanges);
     return maxChange < 5; // 5%未満の変化
   }
 
   private calculateErrorRate(context: TaskContext): number {
-    const totalSteps = context.iterations.reduce((sum, iter) => 
-      sum + iter.execution.length, 0
+    const totalSteps = context.iterations.reduce(
+      (sum, iter) => sum + iter.execution.length,
+      0
     );
-    const failedSteps = context.iterations.reduce((sum, iter) => 
-      sum + iter.execution.filter(step => step.status === 'failed').length, 0
+    const failedSteps = context.iterations.reduce(
+      (sum, iter) =>
+        sum + iter.execution.filter((step) => step.status === 'failed').length,
+      0
     );
-    
+
     return totalSteps > 0 ? failedSteps / totalSteps : 0;
   }
 
@@ -657,28 +673,31 @@ Generate a detailed execution plan for the next iteration.
 
   private calculateAverageIterationTime(context: TaskContext): number {
     if (context.iterations.length === 0) return 30; // デフォルト30分
-    
-    const completedIterations = context.iterations.filter(iter => iter.endTime);
+
+    const completedIterations = context.iterations.filter(
+      (iter) => iter.endTime
+    );
     if (completedIterations.length === 0) return 30;
-    
+
     const totalTime = completedIterations.reduce((sum, iter) => {
       const duration = iter.endTime!.getTime() - iter.startTime.getTime();
       return sum + duration;
     }, 0);
-    
+
     return Math.round(totalTime / completedIterations.length / (1000 * 60)); // 分単位
   }
 
   private suggestNextActions(context: TaskContext): string[] {
     const suggestions: string[] = [];
-    
+
     if (context.evaluationResults.length > 0) {
-      const latest = context.evaluationResults[context.evaluationResults.length - 1];
+      const latest =
+        context.evaluationResults[context.evaluationResults.length - 1];
       if (latest?.suggestions) {
-        suggestions.push(...latest.suggestions.map(s => s.title));
+        suggestions.push(...latest.suggestions.map((s) => s.title));
       }
     }
-    
+
     return suggestions;
   }
 
@@ -699,7 +718,11 @@ Generate a detailed execution plan for the next iteration.
 
   async cancelTask(taskId: string): Promise<void> {
     const context = this.activeTasks.get(taskId);
-    if (context && context.status !== 'completed' && context.status !== 'failed') {
+    if (
+      context &&
+      context.status !== 'completed' &&
+      context.status !== 'failed'
+    ) {
       context.status = 'cancelled';
       context.endTime = new Date();
       this.emit('taskCancelled', { context });
@@ -733,5 +756,10 @@ export function createTaskManager(
   config?: Partial<TaskManagerConfig>
 ): TaskManager {
   const finalConfig = { ...defaultTaskManagerConfig, ...config };
-  return new TaskManager(finalConfig, aiManager, claudeIntegration, configManager);
+  return new TaskManager(
+    finalConfig,
+    aiManager,
+    claudeIntegration,
+    configManager
+  );
 }

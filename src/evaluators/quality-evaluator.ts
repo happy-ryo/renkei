@@ -1,6 +1,6 @@
 /**
  * Quality Evaluator - コード品質と機能完成度の評価システム
- * 
+ *
  * 実装されたコードの品質を多角的に評価し、
  * 継続的改善のための具体的なフィードバックを提供します。
  */
@@ -22,7 +22,7 @@ export interface QualityMetrics {
     testCoverage: number;
     complexity: number;
   };
-  
+
   // 機能完成度スコア
   functionality: {
     score: number; // 0-100
@@ -31,7 +31,7 @@ export interface QualityMetrics {
     workingTests: number;
     totalTests: number;
   };
-  
+
   // ユーザビリティスコア
   usability: {
     score: number; // 0-100
@@ -40,7 +40,7 @@ export interface QualityMetrics {
     apiConsistency: number;
     performanceScore: number;
   };
-  
+
   // 総合スコア
   overall: {
     score: number; // 0-100
@@ -92,14 +92,14 @@ export interface EvaluationConfig {
   projectPath: string;
   includePatterns: string[];
   excludePatterns: string[];
-  
+
   // 評価重み設定
   weights: {
     codeQuality: number;
     functionality: number;
     usability: number;
   };
-  
+
   // しきい値設定
   thresholds: {
     minCoverage: number;
@@ -110,7 +110,7 @@ export interface EvaluationConfig {
 
 /**
  * 品質評価エンジン
- * 
+ *
  * コード品質、機能完成度、ユーザビリティを総合的に評価し、
  * 改善提案を生成するシステム
  */
@@ -145,7 +145,11 @@ export class QualityEvaluator extends EventEmitter {
       ]);
 
       // 総合スコア計算
-      const overall = this.calculateOverallScore(codeQuality, functionality, usability);
+      const overall = this.calculateOverallScore(
+        codeQuality,
+        functionality,
+        usability
+      );
 
       const metrics: QualityMetrics = {
         codeQuality,
@@ -171,7 +175,6 @@ export class QualityEvaluator extends EventEmitter {
 
       this.emit('evaluationCompleted', result);
       return result;
-
     } catch (error) {
       this.emit('evaluationError', error);
       throw error;
@@ -186,20 +189,26 @@ export class QualityEvaluator extends EventEmitter {
   private async evaluateCodeQuality(): Promise<QualityMetrics['codeQuality']> {
     this.emit('progress', { phase: 'codeQuality', status: 'started' });
 
-    const [lintErrors, typeErrors, testCoverage, complexity] = await Promise.all([
-      this.runLintCheck(),
-      this.runTypeCheck(),
-      this.measureTestCoverage(),
-      this.measureComplexity(),
-    ]);
+    const [lintErrors, typeErrors, testCoverage, complexity] =
+      await Promise.all([
+        this.runLintCheck(),
+        this.runTypeCheck(),
+        this.measureTestCoverage(),
+        this.measureComplexity(),
+      ]);
 
     // スコア計算（各指標を正規化して重み付け平均）
     const lintScore = Math.max(0, 100 - lintErrors * 5);
     const typeScore = Math.max(0, 100 - typeErrors * 10);
     const coverageScore = testCoverage;
-    const complexityScore = Math.max(0, 100 - Math.max(0, complexity - this.config.thresholds.maxComplexity) * 10);
+    const complexityScore = Math.max(
+      0,
+      100 - Math.max(0, complexity - this.config.thresholds.maxComplexity) * 10
+    );
 
-    const score = Math.round((lintScore + typeScore + coverageScore + complexityScore) / 4);
+    const score = Math.round(
+      (lintScore + typeScore + coverageScore + complexityScore) / 4
+    );
 
     this.emit('progress', { phase: 'codeQuality', status: 'completed', score });
 
@@ -215,7 +224,9 @@ export class QualityEvaluator extends EventEmitter {
   /**
    * 機能完成度評価
    */
-  private async evaluateFunctionality(): Promise<QualityMetrics['functionality']> {
+  private async evaluateFunctionality(): Promise<
+    QualityMetrics['functionality']
+  > {
     this.emit('progress', { phase: 'functionality', status: 'started' });
 
     const [testResults, featureAnalysis] = await Promise.all([
@@ -223,15 +234,23 @@ export class QualityEvaluator extends EventEmitter {
       this.analyzeFeatureCompleteness(),
     ]);
 
-    const workingTestsRatio = testResults.total > 0 ? 
-      (testResults.passed / testResults.total) * 100 : 0;
+    const workingTestsRatio =
+      testResults.total > 0
+        ? (testResults.passed / testResults.total) * 100
+        : 0;
 
-    const featureCompletionRatio = featureAnalysis.total > 0 ?
-      (featureAnalysis.implemented.length / featureAnalysis.total) * 100 : 0;
+    const featureCompletionRatio =
+      featureAnalysis.total > 0
+        ? (featureAnalysis.implemented.length / featureAnalysis.total) * 100
+        : 0;
 
     const score = Math.round((workingTestsRatio + featureCompletionRatio) / 2);
 
-    this.emit('progress', { phase: 'functionality', status: 'completed', score });
+    this.emit('progress', {
+      phase: 'functionality',
+      status: 'completed',
+      score,
+    });
 
     return {
       score,
@@ -248,14 +267,17 @@ export class QualityEvaluator extends EventEmitter {
   private async evaluateUsability(): Promise<QualityMetrics['usability']> {
     this.emit('progress', { phase: 'usability', status: 'started' });
 
-    const [errorHandling, documentation, apiConsistency, performance] = await Promise.all([
-      this.evaluateErrorHandling(),
-      this.evaluateDocumentation(),
-      this.evaluateApiConsistency(),
-      this.evaluatePerformance(),
-    ]);
+    const [errorHandling, documentation, apiConsistency, performance] =
+      await Promise.all([
+        this.evaluateErrorHandling(),
+        this.evaluateDocumentation(),
+        this.evaluateApiConsistency(),
+        this.evaluatePerformance(),
+      ]);
 
-    const score = Math.round((errorHandling + documentation + apiConsistency + performance) / 4);
+    const score = Math.round(
+      (errorHandling + documentation + apiConsistency + performance) / 4
+    );
 
     this.emit('progress', { phase: 'usability', status: 'completed', score });
 
@@ -277,12 +299,14 @@ export class QualityEvaluator extends EventEmitter {
     usability: QualityMetrics['usability']
   ): QualityMetrics['overall'] {
     const weights = this.config.weights;
-    const totalWeight = weights.codeQuality + weights.functionality + weights.usability;
+    const totalWeight =
+      weights.codeQuality + weights.functionality + weights.usability;
 
     const score = Math.round(
       (codeQuality.score * weights.codeQuality +
-       functionality.score * weights.functionality +
-       usability.score * weights.usability) / totalWeight
+        functionality.score * weights.functionality +
+        usability.score * weights.usability) /
+        totalWeight
     );
 
     // グレード決定
@@ -304,9 +328,17 @@ export class QualityEvaluator extends EventEmitter {
    */
   private async runLintCheck(): Promise<number> {
     try {
-      const result = await this.executeCommand('npx', ['eslint', '--format', 'json', '.']);
+      const result = await this.executeCommand('npx', [
+        'eslint',
+        '--format',
+        'json',
+        '.',
+      ]);
       const lintResult = JSON.parse(result.stdout);
-      return lintResult.reduce((total: number, file: any) => total + file.errorCount, 0);
+      return lintResult.reduce(
+        (total: number, file: any) => total + file.errorCount,
+        0
+      );
     } catch (error) {
       console.warn('Lint check failed:', error);
       return 0;
@@ -320,9 +352,11 @@ export class QualityEvaluator extends EventEmitter {
     try {
       const result = await this.executeCommand('npx', ['tsc', '--noEmit']);
       // TypeScriptのエラー出力から行数をカウント
-      const errorLines = result.stderr.split('\n').filter(line => 
-        line.includes('error TS') && !line.includes('Found ')
-      );
+      const errorLines = result.stderr
+        .split('\n')
+        .filter(
+          (line) => line.includes('error TS') && !line.includes('Found ')
+        );
       return errorLines.length;
     } catch (error) {
       console.warn('Type check failed:', error);
@@ -335,8 +369,15 @@ export class QualityEvaluator extends EventEmitter {
    */
   private async measureTestCoverage(): Promise<number> {
     try {
-      await this.executeCommand('npx', ['jest', '--coverage', '--coverageReporters=json-summary']);
-      const coveragePath = path.join(this.config.projectPath, 'coverage/coverage-summary.json');
+      await this.executeCommand('npx', [
+        'jest',
+        '--coverage',
+        '--coverageReporters=json-summary',
+      ]);
+      const coveragePath = path.join(
+        this.config.projectPath,
+        'coverage/coverage-summary.json'
+      );
       const coverage = JSON.parse(await fs.readFile(coveragePath, 'utf-8'));
       return Math.round(coverage.total.lines.pct);
     } catch (error) {
@@ -398,7 +439,7 @@ export class QualityEvaluator extends EventEmitter {
     // 現在は簡易実装
     const implemented = ['TmuxManager', 'PaneController', 'ConfigManager'];
     const missing = ['SessionManager', 'QualityEvaluator']; // 例
-    
+
     return {
       implemented,
       missing,
@@ -418,15 +459,21 @@ export class QualityEvaluator extends EventEmitter {
       for (const file of tsFiles) {
         const content = await fs.readFile(file, 'utf-8');
         totalFiles++;
-        
+
         // try-catch、エラーハンドリングパターンをチェック
-        if (content.includes('try {') || content.includes('catch (') || 
-            content.includes('throw new') || content.includes('.catch(')) {
+        if (
+          content.includes('try {') ||
+          content.includes('catch (') ||
+          content.includes('throw new') ||
+          content.includes('.catch(')
+        ) {
           filesWithErrorHandling++;
         }
       }
 
-      return totalFiles > 0 ? Math.round((filesWithErrorHandling / totalFiles) * 100) : 0;
+      return totalFiles > 0
+        ? Math.round((filesWithErrorHandling / totalFiles) * 100)
+        : 0;
     } catch (error) {
       return 0;
     }
@@ -443,17 +490,20 @@ export class QualityEvaluator extends EventEmitter {
 
       for (const file of tsFiles) {
         const content = await fs.readFile(file, 'utf-8');
-        
+
         // 関数とクラスの総数をカウント
-        const functionMatches = content.match(/(?:function|class|interface|type)\s+\w+/g) || [];
+        const functionMatches =
+          content.match(/(?:function|class|interface|type)\s+\w+/g) || [];
         totalFunctions += functionMatches.length;
-        
+
         // JSDocコメントの数をカウント
         const docMatches = content.match(/\/\*\*[\s\S]*?\*\//g) || [];
         documentedFunctions += docMatches.length;
       }
 
-      return totalFunctions > 0 ? Math.round((documentedFunctions / totalFunctions) * 100) : 0;
+      return totalFunctions > 0
+        ? Math.round((documentedFunctions / totalFunctions) * 100)
+        : 0;
     } catch (error) {
       return 0;
     }
@@ -480,7 +530,9 @@ export class QualityEvaluator extends EventEmitter {
   /**
    * 課題識別
    */
-  private async identifyIssues(metrics: QualityMetrics): Promise<QualityIssue[]> {
+  private async identifyIssues(
+    metrics: QualityMetrics
+  ): Promise<QualityIssue[]> {
     const issues: QualityIssue[] = [];
 
     // コード品質課題
@@ -508,7 +560,9 @@ export class QualityEvaluator extends EventEmitter {
         severity: 'critical',
         category: 'functionality',
         message: `${metrics.functionality.missingFeatures.length} features are not implemented`,
-        suggestion: 'Implement missing features: ' + metrics.functionality.missingFeatures.join(', '),
+        suggestion:
+          'Implement missing features: ' +
+          metrics.functionality.missingFeatures.join(', '),
       });
     }
 
@@ -518,7 +572,9 @@ export class QualityEvaluator extends EventEmitter {
   /**
    * 改善提案生成
    */
-  private async generateSuggestions(metrics: QualityMetrics): Promise<QualitySuggestion[]> {
+  private async generateSuggestions(
+    metrics: QualityMetrics
+  ): Promise<QualitySuggestion[]> {
     const suggestions: QualitySuggestion[] = [];
 
     if (metrics.codeQuality.score < 80) {
@@ -537,7 +593,8 @@ export class QualityEvaluator extends EventEmitter {
         priority: 'medium',
         category: 'documentation',
         title: 'Documentation Enhancement',
-        description: 'Add JSDoc comments to public APIs and create usage examples',
+        description:
+          'Add JSDoc comments to public APIs and create usage examples',
         estimatedEffort: 'small',
         expectedImpact: 'Better developer experience',
       });
@@ -583,7 +640,7 @@ export class QualityEvaluator extends EventEmitter {
       /\?/g, // 三項演算子
     ];
 
-    patterns.forEach(pattern => {
+    patterns.forEach((pattern) => {
       const matches = content.match(pattern);
       if (matches) {
         complexity += matches.length;
@@ -598,14 +655,18 @@ export class QualityEvaluator extends EventEmitter {
    */
   private async findTypeScriptFiles(): Promise<string[]> {
     const files: string[] = [];
-    
+
     const searchDir = async (dir: string): Promise<void> => {
       const entries = await fs.readdir(dir, { withFileTypes: true });
-      
+
       for (const entry of entries) {
         const fullPath = path.join(dir, entry.name);
-        
-        if (entry.isDirectory() && !entry.name.startsWith('.') && entry.name !== 'node_modules') {
+
+        if (
+          entry.isDirectory() &&
+          !entry.name.startsWith('.') &&
+          entry.name !== 'node_modules'
+        ) {
           await searchDir(fullPath);
         } else if (entry.isFile() && entry.name.endsWith('.ts')) {
           files.push(fullPath);
@@ -620,9 +681,12 @@ export class QualityEvaluator extends EventEmitter {
   /**
    * コマンド実行ユーティリティ
    */
-  private executeCommand(command: string, args: string[]): Promise<{ stdout: string; stderr: string }> {
+  private executeCommand(
+    command: string,
+    args: string[]
+  ): Promise<{ stdout: string; stderr: string }> {
     return new Promise((resolve, reject) => {
-      const process = spawn(command, args, { 
+      const process = spawn(command, args, {
         cwd: this.config.projectPath,
         stdio: ['ignore', 'pipe', 'pipe'],
       });
@@ -639,7 +703,8 @@ export class QualityEvaluator extends EventEmitter {
       });
 
       process.on('close', (code) => {
-        if (code === 0 || command.includes('tsc')) { // tscはエラーでもコード0以外を返すことがある
+        if (code === 0 || command.includes('tsc')) {
+          // tscはエラーでもコード0以外を返すことがある
           resolve({ stdout, stderr });
         } else {
           reject(new Error(`Command failed with code ${code}: ${stderr}`));
@@ -672,13 +737,13 @@ export const defaultEvaluationConfig: EvaluationConfig = {
   projectPath: process.cwd(),
   includePatterns: ['src/**/*.ts', 'test/**/*.ts'],
   excludePatterns: ['node_modules/**', 'dist/**', 'coverage/**'],
-  
+
   weights: {
     codeQuality: 0.4,
     functionality: 0.4,
     usability: 0.2,
   },
-  
+
   thresholds: {
     minCoverage: 70,
     maxComplexity: 10,
@@ -689,7 +754,9 @@ export const defaultEvaluationConfig: EvaluationConfig = {
 /**
  * QualityEvaluatorファクトリ関数
  */
-export function createQualityEvaluator(config?: Partial<EvaluationConfig>): QualityEvaluator {
+export function createQualityEvaluator(
+  config?: Partial<EvaluationConfig>
+): QualityEvaluator {
   const finalConfig = { ...defaultEvaluationConfig, ...config };
   return new QualityEvaluator(finalConfig);
 }

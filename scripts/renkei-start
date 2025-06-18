@@ -48,28 +48,69 @@ function logHeader(message) {
   log(`\n${colors.bold}🚀 ${message}${colors.reset}`, colors.cyan);
 }
 
-// 設定ファイル読み込み
-function loadConfig() {
-  const userSettingsPath = path.join(process.cwd(), 'data/user-settings.json');
-  const defaultSettingsPath = path.join(process.cwd(), 'config/default-settings.json');
-  
+// 設定ファイル読み込み（プロファイル対応）
+function loadConfig(profileName = null) {
   let config;
   
   try {
-    if (fs.existsSync(userSettingsPath)) {
-      config = JSON.parse(fs.readFileSync(userSettingsPath, 'utf8'));
-      logInfo(`Loaded user settings from: ${userSettingsPath}`);
-    } else if (fs.existsSync(defaultSettingsPath)) {
-      config = JSON.parse(fs.readFileSync(defaultSettingsPath, 'utf8'));
-      logInfo(`Loaded default settings from: ${defaultSettingsPath}`);
+    // プロファイル指定時の処理
+    if (profileName) {
+      const profilePath = path.join(process.cwd(), 'config', 'profiles', `${profileName}.json`);
+      if (fs.existsSync(profilePath)) {
+        config = JSON.parse(fs.readFileSync(profilePath, 'utf8'));
+        logInfo(`Loaded profile configuration: ${profileName}`);
+        logInfo(`Profile path: ${profilePath}`);
+      } else {
+        throw new Error(`Profile '${profileName}' not found at: ${profilePath}`);
+      }
     } else {
-      throw new Error('No configuration file found. Please run "scripts/renkei-setup" first.');
+      // 通常の設定ファイル読み込み
+      const userSettingsPath = path.join(process.cwd(), 'data/user-settings.json');
+      const defaultSettingsPath = path.join(process.cwd(), 'config/default-settings.json');
+      
+      if (fs.existsSync(userSettingsPath)) {
+        config = JSON.parse(fs.readFileSync(userSettingsPath, 'utf8'));
+        logInfo(`Loaded user settings from: ${userSettingsPath}`);
+      } else if (fs.existsSync(defaultSettingsPath)) {
+        config = JSON.parse(fs.readFileSync(defaultSettingsPath, 'utf8'));
+        logInfo(`Loaded default settings from: ${defaultSettingsPath}`);
+      } else {
+        throw new Error('No configuration file found. Please run "scripts/renkei-setup" first.');
+      }
+    }
+    
+    // プロファイル情報を設定に追加
+    if (profileName) {
+      config.currentProfile = profileName;
     }
     
     return config;
   } catch (error) {
     logError(`Failed to load configuration: ${error.message}`);
     throw error;
+  }
+}
+
+// 利用可能なプロファイル一覧取得
+function listAvailableProfiles() {
+  const profilesDir = path.join(process.cwd(), 'config', 'profiles');
+  const profiles = [];
+  
+  try {
+    if (fs.existsSync(profilesDir)) {
+      const files = fs.readdirSync(profilesDir);
+      files.forEach(file => {
+        if (file.endsWith('.json')) {
+          const profileName = file.replace('.json', '');
+          profiles.push(profileName);
+        }
+      });
+    }
+    
+    return profiles;
+  } catch (error) {
+    logWarning(`Failed to list profiles: ${error.message}`);
+    return [];
   }
 }
 
@@ -310,40 +351,460 @@ function preflightCheck() {
   logSuccess('Preflight check completed');
 }
 
-// メイン関数
-async function main() {
+// セッション復元機能
+function restoreSession(sessionId) {
+  try {
+    logHeader('Session Restoration');
+    
+    const sessionDir = path.join(process.cwd(), 'data', 'sessions');
+    let sessionFile;
+    
+    if (sessionId === 'latest') {
+      // 最新のセッションファイルを探す
+      const sessionFiles = fs.readdirSync(sessionDir)
+        .filter(file => file.startsWith('session-') && file.endsWith('.json'))
+        .sort()
+        .reverse();
+      
+      if (sessionFiles.length === 0) {
+        throw new Error('No session files found');
+      }
+      
+      sessionFile = path.join(sessionDir, sessionFiles[0]);
+      logInfo(`Found latest session: ${sessionFiles[0]}`);
+    } else {
+      // 指定されたセッションIDを探す
+      sessionFile = path.join(sessionDir, `session-${sessionId}.json`);
+      if (!fs.existsSync(sessionFile)) {
+        // session-プレフィックスがない場合も試す
+        sessionFile = path.join(sessionDir, `${sessionId}.json`);
+        if (!fs.existsSync(sessionFile)) {
+          throw new Error(`Session '${sessionId}' not found`);
+        }
+      }
+    }
+    
+    // セッション情報読み込み
+    const sessionState = JSON.parse(fs.readFileSync(sessionFile, 'utf8'));
+    logInfo(`Restoring session from: ${sessionFile}`);
+    logInfo(`Session timestamp: ${sessionState.timestamp}`);
+    logInfo(`Session name: ${sessionState.sessionName}`);
+    
+    return sessionState;
+    
+  } catch (error) {
+    logError(`Session restoration failed: ${error.message}`);
+    throw error;
+  }
+}
+
+// システム診断機能
+function runDiagnostics() {
+  logHeader('System Diagnostics');
+  
+  const diagnostics = {
+    environment: {},
+    performance: {},
+    issues: []
+  };
+  
+  try {
+    // 環境情報収集
+    diagnostics.environment = {
+      nodeVersion: process.version,
+      platform: os.platform(),
+      arch: os.arch(),
+      totalMemory: os.totalmem(),
+      freeMemory: os.freemem(),
+      uptime: os.uptime(),
+      loadAverage: os.loadavg()
+    };
+    
+    logInfo(`Platform: ${diagnostics.environment.platform} (${diagnostics.environment.arch})`);
+    logInfo(`Node.js: ${diagnostics.environment.nodeVersion}`);
+    logInfo(`Memory: ${Math.round(diagnostics.environment.freeMemory / 1024 / 1024)}MB free / ${Math.round(diagnostics.environment.totalMemory / 1024 / 1024)}MB total`);
+    
+    // パフォーマンステスト
+    const startTime = Date.now();
+    
+    // tmux応答性テスト
+    try {
+      execSync('tmux list-sessions', { stdio: 'pipe', timeout: 5000 });
+      const tmuxResponseTime = Date.now() - startTime;
+      diagnostics.performance.tmuxResponse = tmuxResponseTime;
+      logSuccess(`tmux response time: ${tmuxResponseTime}ms`);
+    } catch (error) {
+      diagnostics.issues.push('tmux response test failed');
+      logWarning('tmux response test failed');
+    }
+    
+    // ディスク容量チェック
+    try {
+      const workspaceDir = path.join(process.cwd());
+      const stats = fs.statSync(workspaceDir);
+      diagnostics.performance.workspaceAccess = Date.now() - startTime;
+      logSuccess(`Workspace access: ${diagnostics.performance.workspaceAccess}ms`);
+    } catch (error) {
+      diagnostics.issues.push('workspace access test failed');
+      logWarning('Workspace access test failed');
+    }
+    
+    // 依存関係チェック
+    const requiredCommands = ['node', 'npm', 'tmux'];
+    requiredCommands.forEach(cmd => {
+      try {
+        execSync(`which ${cmd}`, { stdio: 'pipe' });
+        logSuccess(`${cmd}: available`);
+      } catch (error) {
+        diagnostics.issues.push(`${cmd} not found`);
+        logError(`${cmd}: not available`);
+      }
+    });
+    
+    // メモリ使用率チェック
+    const memoryUsage = (1 - diagnostics.environment.freeMemory / diagnostics.environment.totalMemory) * 100;
+    if (memoryUsage > 90) {
+      diagnostics.issues.push('High memory usage detected');
+      logWarning(`Memory usage: ${memoryUsage.toFixed(1)}% (high)`);
+    } else {
+      logSuccess(`Memory usage: ${memoryUsage.toFixed(1)}% (normal)`);
+    }
+    
+    // 診断結果サマリー
+    if (diagnostics.issues.length === 0) {
+      logSuccess('All diagnostics passed');
+    } else {
+      logWarning(`${diagnostics.issues.length} issues detected:`);
+      diagnostics.issues.forEach(issue => logWarning(`  - ${issue}`));
+    }
+    
+    return diagnostics;
+    
+  } catch (error) {
+    logError(`Diagnostics failed: ${error.message}`);
+    throw error;
+  }
+}
+
+// メンテナンス機能
+function performMaintenance() {
+  logHeader('System Maintenance');
+  
+  try {
+    // ログローテーション
+    performLogRotation();
+    
+    // キャッシュクリア
+    clearSystemCache();
+    
+    // 設定バックアップ
+    backupConfiguration();
+    
+    logSuccess('System maintenance completed successfully');
+    
+  } catch (error) {
+    logError(`Maintenance failed: ${error.message}`);
+    throw error;
+  }
+}
+
+// ログローテーション
+function performLogRotation() {
+  try {
+    logInfo('Performing log rotation...');
+    
+    const logsDir = path.join(process.cwd(), 'data', 'logs');
+    const maxLogFiles = 10;
+    const maxLogSize = 10 * 1024 * 1024; // 10MB
+    
+    // ログディレクトリ確認・作成
+    if (!fs.existsSync(logsDir)) {
+      fs.mkdirSync(logsDir, { recursive: true });
+      logInfo('Created logs directory');
+      return;
+    }
+    
+    // ログファイル一覧取得
+    const logFiles = fs.readdirSync(logsDir)
+      .filter(file => file.endsWith('.log'))
+      .map(file => {
+        const fullPath = path.join(logsDir, file);
+        const stats = fs.statSync(fullPath);
+        return { name: file, path: fullPath, size: stats.size, mtime: stats.mtime };
+      })
+      .sort((a, b) => b.mtime - a.mtime);
+    
+    let rotated = 0;
+    
+    // サイズが大きいファイルをローテーション
+    logFiles.forEach(logFile => {
+      if (logFile.size > maxLogSize) {
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const rotatedName = `${logFile.name.replace('.log', '')}-${timestamp}.log`;
+        const rotatedPath = path.join(logsDir, rotatedName);
+        
+        fs.renameSync(logFile.path, rotatedPath);
+        logInfo(`Rotated large log file: ${logFile.name} -> ${rotatedName}`);
+        rotated++;
+      }
+    });
+    
+    // 古いファイルを削除
+    const allLogFiles = fs.readdirSync(logsDir)
+      .filter(file => file.endsWith('.log'))
+      .map(file => {
+        const fullPath = path.join(logsDir, file);
+        const stats = fs.statSync(fullPath);
+        return { name: file, path: fullPath, mtime: stats.mtime };
+      })
+      .sort((a, b) => b.mtime - a.mtime);
+    
+    if (allLogFiles.length > maxLogFiles) {
+      const filesToDelete = allLogFiles.slice(maxLogFiles);
+      filesToDelete.forEach(file => {
+        fs.unlinkSync(file.path);
+        logInfo(`Deleted old log file: ${file.name}`);
+        rotated++;
+      });
+    }
+    
+    if (rotated === 0) {
+      logInfo('No log rotation needed');
+    } else {
+      logSuccess(`Log rotation completed: ${rotated} files processed`);
+    }
+    
+  } catch (error) {
+    logWarning(`Log rotation failed: ${error.message}`);
+  }
+}
+
+// キャッシュクリア
+function clearSystemCache() {
+  try {
+    logInfo('Clearing system cache...');
+    
+    const cacheDirectories = [
+      path.join(process.cwd(), 'node_modules', '.cache'),
+      path.join(process.cwd(), 'dist'),
+      path.join(process.cwd(), 'coverage'),
+      path.join(process.cwd(), 'data', 'temp'),
+      path.join(process.cwd(), 'data', 'cache')
+    ];
+    
+    let cleared = 0;
+    
+    cacheDirectories.forEach(cacheDir => {
+      if (fs.existsSync(cacheDir)) {
+        try {
+          const files = fs.readdirSync(cacheDir);
+          files.forEach(file => {
+            const filePath = path.join(cacheDir, file);
+            const stats = fs.statSync(filePath);
+            
+            if (stats.isDirectory()) {
+              fs.rmSync(filePath, { recursive: true, force: true });
+            } else {
+              fs.unlinkSync(filePath);
+            }
+          });
+          
+          logInfo(`Cleared cache directory: ${path.relative(process.cwd(), cacheDir)}`);
+          cleared++;
+        } catch (error) {
+          logWarning(`Failed to clear ${cacheDir}: ${error.message}`);
+        }
+      }
+    });
+    
+    // npm cache clean
+    try {
+      execSync('npm cache clean --force', { stdio: 'pipe' });
+      logInfo('Cleared npm cache');
+      cleared++;
+    } catch (error) {
+      logWarning(`Failed to clear npm cache: ${error.message}`);
+    }
+    
+    if (cleared === 0) {
+      logInfo('No cache to clear');
+    } else {
+      logSuccess(`Cache cleared: ${cleared} locations processed`);
+    }
+    
+  } catch (error) {
+    logWarning(`Cache clear failed: ${error.message}`);
+  }
+}
+
+// 設定バックアップ
+function backupConfiguration() {
+  try {
+    logInfo('Creating configuration backup...');
+    
+    const backupDir = path.join(process.cwd(), 'data', 'backups');
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const backupName = `config-backup-${timestamp}`;
+    const backupPath = path.join(backupDir, backupName);
+    
+    // バックアップディレクトリ作成
+    if (!fs.existsSync(backupDir)) {
+      fs.mkdirSync(backupDir, { recursive: true });
+    }
+    
+    fs.mkdirSync(backupPath, { recursive: true });
+    
+    // バックアップ対象ファイル・ディレクトリ
+    const backupTargets = [
+      { src: 'config', dst: 'config' },
+      { src: 'data/user-settings.json', dst: 'user-settings.json' },
+      { src: 'package.json', dst: 'package.json' },
+      { src: 'tsconfig.json', dst: 'tsconfig.json' },
+      { src: '.eslintrc.js', dst: '.eslintrc.js' },
+      { src: '.prettierrc', dst: '.prettierrc' }
+    ];
+    
+    let backedUp = 0;
+    
+    backupTargets.forEach(target => {
+      const srcPath = path.join(process.cwd(), target.src);
+      const dstPath = path.join(backupPath, target.dst);
+      
+      if (fs.existsSync(srcPath)) {
+        try {
+          const stats = fs.statSync(srcPath);
+          
+          if (stats.isDirectory()) {
+            fs.cpSync(srcPath, dstPath, { recursive: true });
+          } else {
+            fs.copyFileSync(srcPath, dstPath);
+          }
+          
+          logInfo(`Backed up: ${target.src}`);
+          backedUp++;
+        } catch (error) {
+          logWarning(`Failed to backup ${target.src}: ${error.message}`);
+        }
+      }
+    });
+    
+    // バックアップメタデータ作成
+    const metadata = {
+      timestamp: new Date().toISOString(),
+      nodeVersion: process.version,
+      platform: os.platform(),
+      backupName: backupName,
+      filesCount: backedUp
+    };
+    
+    fs.writeFileSync(
+      path.join(backupPath, 'backup-metadata.json'),
+      JSON.stringify(metadata, null, 2)
+    );
+    
+    // 古いバックアップの削除（10個まで保持）
+    const maxBackups = 10;
+    const backupFiles = fs.readdirSync(backupDir)
+      .filter(file => file.startsWith('config-backup-'))
+      .map(file => {
+        const fullPath = path.join(backupDir, file);
+        const stats = fs.statSync(fullPath);
+        return { name: file, path: fullPath, mtime: stats.mtime };
+      })
+      .sort((a, b) => b.mtime - a.mtime);
+    
+    if (backupFiles.length > maxBackups) {
+      const filesToDelete = backupFiles.slice(maxBackups);
+      filesToDelete.forEach(file => {
+        fs.rmSync(file.path, { recursive: true, force: true });
+        logInfo(`Deleted old backup: ${file.name}`);
+      });
+    }
+    
+    logSuccess(`Configuration backup created: ${backupName} (${backedUp} items)`);
+    
+  } catch (error) {
+    logWarning(`Configuration backup failed: ${error.message}`);
+  }
+}
+
+// メイン関数（オプション対応版）
+async function main(options = {}) {
   logHeader('Renkei System Start');
   
   try {
-    // 1. 環境チェック
+    // オプション情報表示
+    if (options.profile) {
+      logInfo(`Using profile: ${options.profile}`);
+    }
+    if (options.restore) {
+      logInfo(`Restoring session: ${options.restore}`);
+    }
+    if (options.debug) {
+      logInfo('Debug mode enabled');
+    }
+    
+    // 1. 診断実行（オプション）
+    if (options.diagnose) {
+      const diagnostics = runDiagnostics();
+      if (diagnostics.issues.length > 0) {
+        logWarning('Issues detected during diagnostics. Continue? (Ctrl+C to abort)');
+        // 3秒待機
+        await new Promise(resolve => setTimeout(resolve, 3000));
+      }
+    }
+    
+    // 2. 環境チェック
     preflightCheck();
     
-    // 2. 設定読み込み
-    logHeader('Loading Configuration');
-    const config = loadConfig();
+    // 3. セッション復元処理
+    let restoredSession = null;
+    if (options.restore) {
+      restoredSession = restoreSession(options.restore);
+    }
     
-    // 3. TypeScriptビルド
+    // 4. 設定読み込み
+    logHeader('Loading Configuration');
+    const config = loadConfig(options.profile);
+    
+    // 復元されたセッション情報をマージ
+    if (restoredSession) {
+      config.tmux.sessionName = restoredSession.sessionName;
+      config.workspaceDir = restoredSession.workspaceDir;
+      logInfo('Configuration merged with restored session data');
+    }
+    
+    // 5. TypeScriptビルド
     logHeader('Building Application');
     buildTypeScript();
     
-    // 4. tmuxセッション作成
+    // 6. tmuxセッション作成
     logHeader('Setting up tmux Session');
     createTmuxSession(config);
     
-    // 5. システム起動
+    // 7. システム起動
     logHeader('Starting System');
     startSystem(config);
     
-    // 6. 初期画面表示
+    // 8. 初期画面表示
     logHeader('Displaying Welcome Screen');
     displayWelcomeScreen(config);
     
-    // 7. セッション状態保存
+    // 9. セッション状態保存
     saveSessionState(config);
     
-    // 8. 起動完了
+    // 10. 起動完了
     logHeader('Startup Complete');
     logSuccess('Renkei System has been started successfully!');
+    
+    // 設定情報表示
+    if (config.currentProfile) {
+      logInfo(`Active profile: ${config.currentProfile}`);
+    }
+    if (restoredSession) {
+      logInfo(`Restored from session: ${restoredSession.timestamp}`);
+    }
+    
     logInfo('');
     logInfo('To attach to the tmux session, run:');
     logInfo(`  tmux attach-session -t ${config.tmux.sessionName}`);
@@ -353,17 +814,21 @@ async function main() {
     logInfo('');
     logInfo('Session logs are available in: data/sessions/');
     
-    // tmuxセッションにアタッチ
-    logInfo('Attaching to tmux session...');
-    setTimeout(() => {
-      try {
-        execSync(`tmux attach-session -t ${config.tmux.sessionName}`, { stdio: 'inherit' });
-      } catch (error) {
-        logWarning(`Failed to attach to session: ${error.message}`);
-        logInfo('You can manually attach with:');
-        logInfo(`  tmux attach-session -t ${config.tmux.sessionName}`);
-      }
-    }, 1000);
+    // tmuxセッションにアタッチ（--no-attachオプションでない場合）
+    if (!options.noAttach) {
+      logInfo('Attaching to tmux session...');
+      setTimeout(() => {
+        try {
+          execSync(`tmux attach-session -t ${config.tmux.sessionName}`, { stdio: 'inherit' });
+        } catch (error) {
+          logWarning(`Failed to attach to session: ${error.message}`);
+          logInfo('You can manually attach with:');
+          logInfo(`  tmux attach-session -t ${config.tmux.sessionName}`);
+        }
+      }, 1000);
+    } else {
+      logInfo('Skipping tmux attach (--no-attach specified)');
+    }
     
   } catch (error) {
     logError(`Startup failed: ${error.message}`);
@@ -379,10 +844,14 @@ function parseArguments() {
   const options = {
     help: false,
     debug: false,
-    noAttach: false
+    noAttach: false,
+    profile: null,
+    restore: null,
+    diagnose: false
   };
   
-  for (const arg of args) {
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
     switch (arg) {
       case '--help':
       case '-h':
@@ -394,6 +863,27 @@ function parseArguments() {
         break;
       case '--no-attach':
         options.noAttach = true;
+        break;
+      case '--profile':
+      case '-p':
+        if (i + 1 < args.length) {
+          options.profile = args[++i];
+        } else {
+          logError('--profile requires a profile name');
+          process.exit(1);
+        }
+        break;
+      case '--restore':
+      case '-r':
+        if (i + 1 < args.length) {
+          options.restore = args[++i];
+        } else {
+          logError('--restore requires a session ID or "latest"');
+          process.exit(1);
+        }
+        break;
+      case '--diagnose':
+        options.diagnose = true;
         break;
       default:
         logWarning(`Unknown option: ${arg}`);
@@ -409,15 +899,32 @@ function showHelp() {
   logInfo('');
   logInfo('Usage: scripts/renkei-start [options]');
   logInfo('');
-  logInfo('Options:');
-  logInfo('  -h, --help       Show this help message');
-  logInfo('  -d, --debug      Enable debug mode');
-  logInfo('  --no-attach      Start without attaching to tmux session');
+  logInfo('Basic Options:');
+  logInfo('  -h, --help           Show this help message');
+  logInfo('  -d, --debug          Enable debug mode with verbose logging');
+  logInfo('  --no-attach          Start without attaching to tmux session');
+  logInfo('');
+  logInfo('Advanced Options:');
+  logInfo('  -p, --profile NAME   Use specific configuration profile');
+  logInfo('  -r, --restore ID     Restore from previous session (ID or "latest")');
+  logInfo('  --diagnose           Run system diagnostics before starting');
+  logInfo('');
+  logInfo('Configuration Profiles:');
+  logInfo('  Available profiles are stored in config/profiles/');
+  logInfo('  Use --profile to specify: development, production, testing, etc.');
+  logInfo('');
+  logInfo('Session Restoration:');
+  logInfo('  Use --restore latest          # Restore most recent session');
+  logInfo('  Use --restore session-id     # Restore specific session');
+  logInfo('  Session files are in data/sessions/');
   logInfo('');
   logInfo('Examples:');
-  logInfo('  scripts/renkei-start              # Normal startup');
-  logInfo('  scripts/renkei-start --debug      # Debug mode');
-  logInfo('  scripts/renkei-start --no-attach  # Background start');
+  logInfo('  scripts/renkei-start                    # Normal startup');
+  logInfo('  scripts/renkei-start --debug            # Debug mode');
+  logInfo('  scripts/renkei-start --no-attach        # Background start');
+  logInfo('  scripts/renkei-start -p development     # Use development profile');
+  logInfo('  scripts/renkei-start -r latest          # Restore latest session');
+  logInfo('  scripts/renkei-start --diagnose         # Run diagnostics first');
 }
 
 // スクリプト実行
@@ -434,7 +941,27 @@ if (require.main === module) {
     process.env.RENKEI_DEBUG = 'true';
   }
   
-  main().catch(error => {
+  // プロファイル存在チェック
+  if (options.profile) {
+    const profiles = listAvailableProfiles();
+    if (profiles.length === 0) {
+      logWarning('No profiles directory found. Creating config/profiles/');
+      try {
+        const profilesDir = path.join(process.cwd(), 'config', 'profiles');
+        fs.mkdirSync(profilesDir, { recursive: true });
+        logInfo('Profiles directory created. Add profile files (.json) to use --profile option.');
+      } catch (error) {
+        logError(`Failed to create profiles directory: ${error.message}`);
+      }
+    } else if (!profiles.includes(options.profile)) {
+      logError(`Profile '${options.profile}' not found.`);
+      logInfo('Available profiles:');
+      profiles.forEach(profile => logInfo(`  - ${profile}`));
+      process.exit(1);
+    }
+  }
+  
+  main(options).catch(error => {
     logError(`Unexpected error: ${error.message}`);
     process.exit(1);
   });
