@@ -228,43 +228,57 @@ function startSystem(config) {
   }
 }
 
-// 初期画面表示
+// 初期画面表示とログ監視開始
 function displayWelcomeScreen(config) {
   try {
     const sessionName = config.tmux.sessionName;
     
-    // ウェルカムメッセージをサブペインに送信
-    const welcomeMessages = [
+    // ログファイルの存在確認・作成
+    const logDir = path.join(process.cwd(), 'data', 'logs');
+    const logFile = path.join(logDir, 'renkei-worker.log');
+    
+    // ログディレクトリ作成
+    if (!fs.existsSync(logDir)) {
+      fs.mkdirSync(logDir, { recursive: true });
+      logInfo('Created logs directory');
+    }
+    
+    // ログファイル初期化
+    if (!fs.existsSync(logFile)) {
+      const initialMessage = `[${new Date().toISOString()}] 🚀 Renkei System initialized\n`;
+      fs.writeFileSync(logFile, initialMessage);
+      logInfo('Created worker log file');
+    }
+    
+    // 初期ヘッダーメッセージをサブペインに送信
+    const headerMessages = [
       '',
-      '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
-      '🤖 Renkei System - AI Development Assistant',
-      '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
-      '',
-      '✅ System initialized successfully',
-      '🔧 tmux session active',
-      '📁 Workspace ready',
-      '',
-      'Available commands:',
-      '  help     - Show command help',
-      '  status   - System status',
-      '  config   - Configuration management',
-      '  stop     - Stop the system',
-      '',
-      'Ready for AI-assisted development!',
-      '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+      '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+      '🤖 Renkei System - Worker Status Monitor',
+      '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
       ''
     ];
     
-    // メッセージをサブペインに送信
-    welcomeMessages.forEach(message => {
+    headerMessages.forEach(message => {
       execSync(`tmux send-keys -t ${sessionName}:0.1 "echo '${message}'" Enter`, { stdio: 'pipe' });
     });
     
-    logSuccess('Welcome screen displayed');
+    // ログ監視コマンドを開始 - より簡単で確実な方法
+    const logMonitorCommand = `tail -f "${logFile}" || echo "Waiting for worker logs..."`;
+    execSync(`tmux send-keys -t ${sessionName}:0.1 "${logMonitorCommand}" Enter`, { stdio: 'pipe' });
+    
+    logSuccess('Worker status monitor started');
+    logInfo(`Monitoring log file: ${logFile}`);
     
   } catch (error) {
-    logWarning(`Failed to display welcome screen: ${error.message}`);
-    // 非致命的エラーとして継続
+    logWarning(`Failed to start worker monitor: ${error.message}`);
+    // フォールバック: 静的メッセージ表示
+    try {
+      const sessionName = config.tmux.sessionName;
+      execSync(`tmux send-keys -t ${sessionName}:0.1 "echo 'Worker status monitor unavailable. Check logs manually.'" Enter`, { stdio: 'pipe' });
+    } catch (fallbackError) {
+      logError(`Fallback display also failed: ${fallbackError.message}`);
+    }
   }
 }
 

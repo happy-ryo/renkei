@@ -368,22 +368,30 @@ export class SettingsManager extends EventEmitter {
         !settings.permissions.allow ||
         !settings.permissions.deny
       ) {
-        console.warn('設定ファイルのpermissionsフィールドが不正です。デフォルト値で修復します。');
+        console.warn(
+          '設定ファイルのpermissionsフィールドが不正です。デフォルト値で修復します。'
+        );
         needsUpdate = true;
       }
 
       if (!settings.workspaceRestrictions) {
-        console.warn('設定ファイルのworkspaceRestrictionsフィールドが不正です。デフォルト値で修復します。');
+        console.warn(
+          '設定ファイルのworkspaceRestrictionsフィールドが不正です。デフォルト値で修復します。'
+        );
         needsUpdate = true;
       }
 
       if (!settings.executionLimits) {
-        console.warn('設定ファイルのexecutionLimitsフィールドが不正です。デフォルト値で修復します。');
+        console.warn(
+          '設定ファイルのexecutionLimitsフィールドが不正です。デフォルト値で修復します。'
+        );
         needsUpdate = true;
       }
 
       if (!settings.security) {
-        console.warn('設定ファイルのsecurityフィールドが不正です。デフォルト値で修復します。');
+        console.warn(
+          '設定ファイルのsecurityフィールドが不正です。デフォルト値で修復します。'
+        );
         needsUpdate = true;
       }
 
@@ -396,7 +404,9 @@ export class SettingsManager extends EventEmitter {
       this.emit('settings_validated', { settings });
     } catch (error) {
       // 設定ファイルの読み込みや検証に完全に失敗した場合は再生成
-      console.warn('設定ファイルの検証に失敗しました。デフォルト設定で再生成します。');
+      console.warn(
+        '設定ファイルの検証に失敗しました。デフォルト設定で再生成します。'
+      );
       await this.generateDefaultSettings();
     }
   }
