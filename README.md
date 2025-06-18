@@ -1,8 +1,10 @@
 # Renkei System 🤖
 
+現在開発中。
+
 > AI-powered Development Assistant with tmux Integration
 
-Renkei（連携）は、ClaudeCodeと連携してAI支援開発を実現する高度なシステムです。tmuxベースのユーザーインターフェースを通じて、自然言語でのタスク指示から自動的な実装・評価・改善サイクルを提供します。
+Renkei（連携）は、ClaudeCodeと連携してAI支援開発を実現する高度なシステムです。tmuxベースのユーザーインターフェースを通じて、自然言語でのタスク指示から自動的な実装・評価・改善サイクルを提供することを目的としています。
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Node.js Version](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen)](https://nodejs.org/)
