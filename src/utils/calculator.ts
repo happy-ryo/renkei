@@ -70,7 +70,8 @@ export const calc = {
   percentage: (value: number, percentage: number) => (value * percentage) / 100,
   power: (base: number, exponent: number) => Math.pow(base, exponent),
   sqrt: (value: number) => {
-    if (value < 0) throw new Error('Cannot calculate square root of negative number');
+    if (value < 0)
+      throw new Error('Cannot calculate square root of negative number');
     return Math.sqrt(value);
-  }
+  },
 };

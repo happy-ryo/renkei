@@ -29,7 +29,9 @@ describe('Calculator', () => {
     });
 
     test('should throw error when dividing by zero', () => {
-      expect(() => calculator.divide(5, 0)).toThrow('Division by zero is not allowed');
+      expect(() => calculator.divide(5, 0)).toThrow(
+        'Division by zero is not allowed'
+      );
     });
   });
 
@@ -50,7 +52,9 @@ describe('Calculator', () => {
     });
 
     test('should throw error for negative square root', () => {
-      expect(() => calculator.sqrt(-1)).toThrow('Cannot calculate square root of negative number');
+      expect(() => calculator.sqrt(-1)).toThrow(
+        'Cannot calculate square root of negative number'
+      );
     });
   });
 
