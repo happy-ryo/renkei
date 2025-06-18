@@ -2,15 +2,15 @@
  * Renkei System - メインエントリーポイント
  */
 
-import { configManager } from './managers/config-manager.js';
-import { createClaudeIntegration } from './integrations/claude-integration.js';
-import { createSettingsManager } from './integrations/settings-manager.js';
-import { createResultProcessor } from './integrations/result-processor.js';
-import { TmuxManager } from './ui/tmux-manager.js';
-import { AIManager } from './managers/ai-manager.js';
-import { TaskEvaluator } from './evaluators/task-evaluator.js';
-import { SessionManager } from './managers/session-manager.js';
-import { RenkeiError, ErrorSeverity } from './interfaces/types.js';
+import { configManager } from './managers/config-manager';
+import { createClaudeIntegration } from './integrations/claude-integration';
+import { createSettingsManager } from './integrations/settings-manager';
+import { createResultProcessor } from './integrations/result-processor';
+import { TmuxManager } from './ui/tmux-manager';
+import { AIManager } from './managers/ai-manager';
+import { TaskEvaluator } from './evaluators/task-evaluator';
+import { SessionManager } from './managers/session-manager';
+import { RenkeiError, ErrorSeverity } from './interfaces/types';
 import chalk from 'chalk';
 import { EventEmitter } from 'events';
 

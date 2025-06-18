@@ -434,19 +434,19 @@ export class PaneController extends EventEmitter {
 
   private setupTmuxEventHandlers(): void {
     // TmuxManagerからのイベントを中継
-    this.tmuxManager.on('pane_split', (data) => {
+    this.tmuxManager.on('pane_split', (data: any) => {
       this.emit('pane_split', data);
     });
 
-    this.tmuxManager.on('pane_updated', (data) => {
+    this.tmuxManager.on('pane_updated', (data: any) => {
       this.emit('pane_updated', data);
     });
 
-    this.tmuxManager.on('pane_focused', (data) => {
+    this.tmuxManager.on('pane_focused', (data: any) => {
       this.emit('pane_focused', data);
     });
 
-    this.tmuxManager.on('pane_resized', (data) => {
+    this.tmuxManager.on('pane_resized', (data: any) => {
       this.emit('pane_resized', data);
     });
   }
