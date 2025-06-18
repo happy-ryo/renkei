@@ -5,7 +5,12 @@
 
 import { promises as fs } from 'fs';
 import * as path from 'path';
-import { SessionState, SessionMetadata, RenkeiError, ErrorSeverity } from '../interfaces/types.js';
+import {
+  SessionState,
+  SessionMetadata,
+  RenkeiError,
+  ErrorSeverity,
+} from '../interfaces/types.js';
 
 /**
  * 永続化設定
@@ -74,7 +79,7 @@ export class SessionPersistence {
       const sessionData = {
         ...sessionState,
         lastSaved: new Date(),
-        version: '1.0'
+        version: '1.0',
       };
 
       await fs.writeFile(
@@ -85,7 +90,6 @@ export class SessionPersistence {
 
       // 履歴を更新
       await this.updateHistory(sessionState);
-
     } catch (error) {
       throw new RenkeiError(
         `Failed to save session ${sessionState.sessionId}`,
@@ -121,14 +125,13 @@ export class SessionPersistence {
         taskHistory: parsedSession.taskHistory.map((task: any) => ({
           ...task,
           timestamp: new Date(task.timestamp),
-          deadline: task.deadline ? new Date(task.deadline) : undefined
+          deadline: task.deadline ? new Date(task.deadline) : undefined,
         })),
         context: parsedSession.context,
-        metadata: parsedSession.metadata
+        metadata: parsedSession.metadata,
       };
 
       return sessionState;
-
     } catch (error) {
       throw new RenkeiError(
         'Failed to restore session',
@@ -154,32 +157,38 @@ export class SessionPersistence {
         await fs.copyFile(this.sessionFilePath, backupPath);
       } catch {
         // セッションファイルが存在しない場合は空のバックアップを作成
-        await fs.writeFile(backupPath, JSON.stringify({
-          sessionId,
-          status: 'active',
-          startTime: new Date(),
-          lastActivity: new Date(),
-          taskHistory: [],
-          context: {
-            workingDirectory: process.cwd(),
-            environment: {},
-            openFiles: []
-          },
-          metadata: {
-            totalTasks: 0,
-            successfulTasks: 0,
-            failedTasks: 0,
-            totalExecutionTime: 0,
-            totalCost: 0
-          }
-        }, null, 2));
+        await fs.writeFile(
+          backupPath,
+          JSON.stringify(
+            {
+              sessionId,
+              status: 'active',
+              startTime: new Date(),
+              lastActivity: new Date(),
+              taskHistory: [],
+              context: {
+                workingDirectory: process.cwd(),
+                environment: {},
+                openFiles: [],
+              },
+              metadata: {
+                totalTasks: 0,
+                successfulTasks: 0,
+                failedTasks: 0,
+                totalExecutionTime: 0,
+                totalCost: 0,
+              },
+            },
+            null,
+            2
+          )
+        );
       }
 
       // 古いバックアップを清理
       await this.cleanupOldBackups();
 
       return backupPath;
-
     } catch (error) {
       throw new RenkeiError(
         `Failed to create backup for session ${sessionId}`,
@@ -207,9 +216,8 @@ export class SessionPersistence {
       return history.map((entry: any) => ({
         ...entry,
         startTime: new Date(entry.startTime),
-        endTime: entry.endTime ? new Date(entry.endTime) : undefined
+        endTime: entry.endTime ? new Date(entry.endTime) : undefined,
       }));
-
     } catch (error) {
       throw new RenkeiError(
         'Failed to get session history',
@@ -226,20 +234,22 @@ export class SessionPersistence {
   private async updateHistory(sessionState: SessionState): Promise<void> {
     try {
       const history = await this.getSessionHistory();
-      
+
       // 既存のエントリを検索
       const existingIndex = history.findIndex(
-        entry => entry.sessionId === sessionState.sessionId
+        (entry) => entry.sessionId === sessionState.sessionId
       );
 
       const historyEntry: SessionHistoryEntry = {
         sessionId: sessionState.sessionId,
         startTime: sessionState.startTime,
-        ...(sessionState.status === 'completed' || sessionState.status === 'failed' 
-          ? { endTime: new Date() } : {}),
+        ...(sessionState.status === 'completed' ||
+        sessionState.status === 'failed'
+          ? { endTime: new Date() }
+          : {}),
         status: sessionState.status,
         taskCount: sessionState.taskHistory.length,
-        metadata: sessionState.metadata
+        metadata: sessionState.metadata,
       };
 
       if (existingIndex >= 0) {
@@ -260,7 +270,6 @@ export class SessionPersistence {
         JSON.stringify(history, null, 2),
         'utf8'
       );
-
     } catch (error) {
       throw new RenkeiError(
         'Failed to update session history',
@@ -278,13 +287,16 @@ export class SessionPersistence {
     try {
       const files = await fs.readdir(this.backupDir);
       const backupFiles = files
-        .filter(file => file.startsWith('session_') && file.endsWith('.json'))
-        .map(file => ({
+        .filter((file) => file.startsWith('session_') && file.endsWith('.json'))
+        .map((file) => ({
           name: file,
           path: path.join(this.backupDir, file),
-          timestamp: this.extractTimestampFromFilename(file)
+          timestamp: this.extractTimestampFromFilename(file),
         }))
-        .filter((file): file is { name: string; path: string; timestamp: Date } => file.timestamp !== null)
+        .filter(
+          (file): file is { name: string; path: string; timestamp: Date } =>
+            file.timestamp !== null
+        )
         .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
 
       // 最新のバックアップを保持し、古いものを削除
@@ -295,7 +307,6 @@ export class SessionPersistence {
           await fs.unlink(file.path);
         }
       }
-
     } catch (error) {
       // バックアップ清理の失敗は警告レベル
       console.warn('Failed to cleanup old backups:', error);
@@ -308,7 +319,7 @@ export class SessionPersistence {
   private extractTimestampFromFilename(filename: string): Date | null {
     const match = filename.match(/session_[^_]+_(.+)\.json$/);
     if (!match || !match[1]) return null;
-    
+
     try {
       const timestampStr = match[1].replace(/-/g, ':');
       return new Date(timestampStr);
@@ -355,14 +366,13 @@ export class SessionPersistence {
         taskHistory: sessionData.taskHistory.map((task: any) => ({
           ...task,
           timestamp: new Date(task.timestamp),
-          deadline: task.deadline ? new Date(task.deadline) : undefined
+          deadline: task.deadline ? new Date(task.deadline) : undefined,
         })),
         context: sessionData.context,
-        metadata: sessionData.metadata
+        metadata: sessionData.metadata,
       };
 
       return sessionState;
-
     } catch (error) {
       throw new RenkeiError(
         `Failed to restore from backup ${backupFileName}`,
@@ -376,25 +386,26 @@ export class SessionPersistence {
   /**
    * 利用可能なバックアップファイル一覧を取得
    */
-  async getAvailableBackups(): Promise<Array<{ filename: string; timestamp: Date; sessionId: string }>> {
+  async getAvailableBackups(): Promise<
+    Array<{ filename: string; timestamp: Date; sessionId: string }>
+  > {
     try {
       const files = await fs.readdir(this.backupDir);
       const backupFiles = files
-        .filter(file => file.startsWith('session_') && file.endsWith('.json'))
-        .map(file => {
+        .filter((file) => file.startsWith('session_') && file.endsWith('.json'))
+        .map((file) => {
           const sessionIdMatch = file.match(/session_([^_]+)_/);
           const timestamp = this.extractTimestampFromFilename(file);
           return {
             filename: file,
             timestamp: timestamp || new Date(0),
-            sessionId: sessionIdMatch?.[1] || 'unknown'
+            sessionId: sessionIdMatch?.[1] || 'unknown',
           };
         })
-        .filter(file => file.timestamp.getTime() > 0)
+        .filter((file) => file.timestamp.getTime() > 0)
         .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
 
       return backupFiles;
-
     } catch (error) {
       throw new RenkeiError(
         'Failed to get available backups',
@@ -413,5 +424,5 @@ export const defaultPersistenceConfig: PersistenceConfig = {
   sessionDir: path.join(process.cwd(), 'workspace', 'sessions'),
   maxHistoryCount: 50,
   backupInterval: 300000, // 5分間隔
-  compressionEnabled: false
+  compressionEnabled: false,
 };

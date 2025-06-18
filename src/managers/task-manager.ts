@@ -525,7 +525,7 @@ export class TaskManager extends EventEmitter {
 
       // 次のタスクを処理
       if (this.taskQueue.length > 0) {
-        setImmediate(() => this.processNextTask());
+        setTimeout(() => this.processNextTask(), 0);
       }
     } catch (error) {
       this.emit('taskProcessingError', { task, error });

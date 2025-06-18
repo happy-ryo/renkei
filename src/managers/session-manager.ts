@@ -5,8 +5,19 @@
 
 import { EventEmitter } from 'events';
 import { v4 as uuidv4 } from 'uuid';
-import { SessionState, SessionContext, TaskRequest, RenkeiError, ErrorSeverity } from '../interfaces/types.js';
-import { SessionPersistence, PersistenceConfig, defaultPersistenceConfig, SessionHistoryEntry } from '../utils/persistence.js';
+import {
+  SessionState,
+  SessionContext,
+  TaskRequest,
+  RenkeiError,
+  ErrorSeverity,
+} from '../interfaces/types.js';
+import {
+  SessionPersistence,
+  PersistenceConfig,
+  defaultPersistenceConfig,
+  SessionHistoryEntry,
+} from '../utils/persistence.js';
 
 /**
  * セッション管理設定
@@ -45,18 +56,18 @@ export class SessionManager extends EventEmitter {
   private persistence: SessionPersistence;
   private currentSession: SessionState | null = null;
   private activeSessions: Map<string, SessionState> = new Map();
-  private autoSaveTimer: NodeJS.Timeout | null = null;
-  private timeoutTimers: Map<string, NodeJS.Timeout> = new Map();
+  private autoSaveTimer: ReturnType<typeof setTimeout> | null = null;
+  private timeoutTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
 
   constructor(config: Partial<SessionManagerConfig> = {}) {
     super();
-    
+
     this.config = {
       persistence: config.persistence || defaultPersistenceConfig,
       autoSaveInterval: config.autoSaveInterval || 30000, // 30秒間隔
       maxConcurrentSessions: config.maxConcurrentSessions || 5,
       sessionTimeout: config.sessionTimeout || 3600000, // 1時間
-      contextRetentionSize: config.contextRetentionSize || 100
+      contextRetentionSize: config.contextRetentionSize || 100,
     };
 
     this.persistence = new SessionPersistence(this.config.persistence);
@@ -68,13 +79,13 @@ export class SessionManager extends EventEmitter {
   async initialize(): Promise<void> {
     try {
       await this.persistence.initialize();
-      
+
       // 既存セッションの復元試行
       await this.attemptSessionRestore();
-      
+
       // 自動保存の開始
       this.startAutoSave();
-      
+
       this.emit(SessionManagerEvents.SESSION_RESTORED);
     } catch (error) {
       throw new RenkeiError(
@@ -89,7 +100,9 @@ export class SessionManager extends EventEmitter {
   /**
    * 新しいセッションを作成
    */
-  async createSession(initialContext?: Partial<SessionContext>): Promise<string> {
+  async createSession(
+    initialContext?: Partial<SessionContext>
+  ): Promise<string> {
     try {
       // 最大セッション数チェック
       if (this.activeSessions.size >= this.config.maxConcurrentSessions) {
@@ -113,15 +126,17 @@ export class SessionManager extends EventEmitter {
           workingDirectory: initialContext?.workingDirectory || process.cwd(),
           environment: initialContext?.environment || {},
           openFiles: initialContext?.openFiles || [],
-          ...(initialContext?.currentTask ? { currentTask: initialContext.currentTask } : {})
+          ...(initialContext?.currentTask
+            ? { currentTask: initialContext.currentTask }
+            : {}),
         },
         metadata: {
           totalTasks: 0,
           successfulTasks: 0,
           failedTasks: 0,
           totalExecutionTime: 0,
-          totalCost: 0
-        }
+          totalCost: 0,
+        },
       };
 
       // セッションを登録
@@ -134,9 +149,11 @@ export class SessionManager extends EventEmitter {
       // セッションを保存
       await this.persistence.saveSession(sessionState);
 
-      this.emit(SessionManagerEvents.SESSION_CREATED, { sessionId, sessionState });
+      this.emit(SessionManagerEvents.SESSION_CREATED, {
+        sessionId,
+        sessionState,
+      });
       return sessionId;
-
     } catch (error) {
       throw new RenkeiError(
         'Failed to create session',
@@ -206,8 +223,10 @@ export class SessionManager extends EventEmitter {
       // タイムアウトタイマーをリセット
       this.setSessionTimeout(targetSessionId);
 
-      this.emit(SessionManagerEvents.TASK_ADDED, { sessionId: targetSessionId, task });
-
+      this.emit(SessionManagerEvents.TASK_ADDED, {
+        sessionId: targetSessionId,
+        task,
+      });
     } catch (error) {
       throw new RenkeiError(
         'Failed to add task to session',
@@ -221,7 +240,10 @@ export class SessionManager extends EventEmitter {
   /**
    * セッションコンテキストを更新
    */
-  async updateContext(contextUpdate: Partial<SessionContext>, sessionId?: string): Promise<void> {
+  async updateContext(
+    contextUpdate: Partial<SessionContext>,
+    sessionId?: string
+  ): Promise<void> {
     try {
       const targetSessionId = sessionId || this.currentSession?.sessionId;
       if (!targetSessionId) {
@@ -244,7 +266,7 @@ export class SessionManager extends EventEmitter {
       // コンテキストを更新
       session.context = {
         ...session.context,
-        ...contextUpdate
+        ...contextUpdate,
       };
       session.lastActivity = new Date();
 
@@ -254,8 +276,10 @@ export class SessionManager extends EventEmitter {
       // タイムアウトタイマーをリセット
       this.setSessionTimeout(targetSessionId);
 
-      this.emit(SessionManagerEvents.CONTEXT_UPDATED, { sessionId: targetSessionId, context: session.context });
-
+      this.emit(SessionManagerEvents.CONTEXT_UPDATED, {
+        sessionId: targetSessionId,
+        context: session.context,
+      });
     } catch (error) {
       throw new RenkeiError(
         'Failed to update session context',
@@ -299,8 +323,9 @@ export class SessionManager extends EventEmitter {
       // タイムアウトタイマーをクリア
       this.clearSessionTimeout(targetSessionId);
 
-      this.emit(SessionManagerEvents.SESSION_PAUSED, { sessionId: targetSessionId });
-
+      this.emit(SessionManagerEvents.SESSION_PAUSED, {
+        sessionId: targetSessionId,
+      });
     } catch (error) {
       throw new RenkeiError(
         'Failed to pause session',
@@ -320,10 +345,14 @@ export class SessionManager extends EventEmitter {
       if (!session) {
         // バックアップから復元を試行
         const backups = await this.persistence.getAvailableBackups();
-        const targetBackup = backups.find(backup => backup.sessionId === sessionId);
-        
+        const targetBackup = backups.find(
+          (backup) => backup.sessionId === sessionId
+        );
+
         if (targetBackup) {
-          const restoredSession = await this.persistence.restoreFromBackup(targetBackup.filename);
+          const restoredSession = await this.persistence.restoreFromBackup(
+            targetBackup.filename
+          );
           this.activeSessions.set(sessionId, restoredSession);
           this.currentSession = restoredSession;
         } else {
@@ -336,7 +365,7 @@ export class SessionManager extends EventEmitter {
       }
 
       const targetSession = this.activeSessions.get(sessionId)!;
-      
+
       // セッション状態をアクティブに変更
       targetSession.status = 'active';
       targetSession.lastActivity = new Date();
@@ -349,7 +378,6 @@ export class SessionManager extends EventEmitter {
       this.setSessionTimeout(sessionId);
 
       this.emit(SessionManagerEvents.SESSION_RESUMED, { sessionId });
-
     } catch (error) {
       throw new RenkeiError(
         'Failed to resume session',
@@ -399,8 +427,9 @@ export class SessionManager extends EventEmitter {
       // タイムアウトタイマーをクリア
       this.clearSessionTimeout(targetSessionId);
 
-      this.emit(SessionManagerEvents.SESSION_COMPLETED, { sessionId: targetSessionId });
-
+      this.emit(SessionManagerEvents.SESSION_COMPLETED, {
+        sessionId: targetSessionId,
+      });
     } catch (error) {
       throw new RenkeiError(
         'Failed to complete session',
@@ -430,7 +459,9 @@ export class SessionManager extends EventEmitter {
   /**
    * 利用可能なバックアップを取得
    */
-  async getAvailableBackups(): Promise<Array<{ filename: string; timestamp: Date; sessionId: string }>> {
+  async getAvailableBackups(): Promise<
+    Array<{ filename: string; timestamp: Date; sessionId: string }>
+  > {
     try {
       return await this.persistence.getAvailableBackups();
     } catch (error) {
@@ -448,22 +479,24 @@ export class SessionManager extends EventEmitter {
    */
   async restoreFromBackup(backupFileName: string): Promise<string> {
     try {
-      const restoredSession = await this.persistence.restoreFromBackup(backupFileName);
-      
+      const restoredSession =
+        await this.persistence.restoreFromBackup(backupFileName);
+
       // セッションをアクティブに設定
       restoredSession.status = 'active';
       restoredSession.lastActivity = new Date();
-      
+
       this.activeSessions.set(restoredSession.sessionId, restoredSession);
       this.currentSession = restoredSession;
 
       // タイムアウトタイマーを設定
       this.setSessionTimeout(restoredSession.sessionId);
 
-      this.emit(SessionManagerEvents.SESSION_RESTORED, { sessionId: restoredSession.sessionId });
-      
-      return restoredSession.sessionId;
+      this.emit(SessionManagerEvents.SESSION_RESTORED, {
+        sessionId: restoredSession.sessionId,
+      });
 
+      return restoredSession.sessionId;
     } catch (error) {
       throw new RenkeiError(
         'Failed to restore session from backup',
@@ -498,7 +531,6 @@ export class SessionManager extends EventEmitter {
       // メモリをクリア
       this.activeSessions.clear();
       this.currentSession = null;
-
     } catch (error) {
       throw new RenkeiError(
         'Failed to shutdown session manager',
@@ -519,18 +551,21 @@ export class SessionManager extends EventEmitter {
         // セッションを復元
         this.activeSessions.set(existingSession.sessionId, existingSession);
         this.currentSession = existingSession;
-        
+
         // タイムアウトタイマーを設定
         this.setSessionTimeout(existingSession.sessionId);
       }
     } catch (error) {
       // セッション復元の失敗は警告レベル
-      this.emit(SessionManagerEvents.ERROR, new RenkeiError(
-        'Failed to restore existing session',
-        'SESSION_RESTORE_WARNING',
-        ErrorSeverity.WARNING,
-        error
-      ));
+      this.emit(
+        SessionManagerEvents.ERROR,
+        new RenkeiError(
+          'Failed to restore existing session',
+          'SESSION_RESTORE_WARNING',
+          ErrorSeverity.WARNING,
+          error
+        )
+      );
     }
   }
 
@@ -542,15 +577,20 @@ export class SessionManager extends EventEmitter {
       try {
         if (this.currentSession) {
           await this.persistence.saveSession(this.currentSession);
-          this.emit(SessionManagerEvents.AUTO_SAVE, { sessionId: this.currentSession.sessionId });
+          this.emit(SessionManagerEvents.AUTO_SAVE, {
+            sessionId: this.currentSession.sessionId,
+          });
         }
       } catch (error) {
-        this.emit(SessionManagerEvents.ERROR, new RenkeiError(
-          'Auto-save failed',
-          'AUTO_SAVE_ERROR',
-          ErrorSeverity.WARNING,
-          error
-        ));
+        this.emit(
+          SessionManagerEvents.ERROR,
+          new RenkeiError(
+            'Auto-save failed',
+            'AUTO_SAVE_ERROR',
+            ErrorSeverity.WARNING,
+            error
+          )
+        );
       }
     }, this.config.autoSaveInterval);
   }
@@ -582,12 +622,15 @@ export class SessionManager extends EventEmitter {
           this.emit(SessionManagerEvents.SESSION_TIMEOUT, { sessionId });
         }
       } catch (error) {
-        this.emit(SessionManagerEvents.ERROR, new RenkeiError(
-          'Session timeout handling failed',
-          'SESSION_TIMEOUT_ERROR',
-          ErrorSeverity.WARNING,
-          error
-        ));
+        this.emit(
+          SessionManagerEvents.ERROR,
+          new RenkeiError(
+            'Session timeout handling failed',
+            'SESSION_TIMEOUT_ERROR',
+            ErrorSeverity.WARNING,
+            error
+          )
+        );
       }
     }, this.config.sessionTimeout);
 
@@ -614,5 +657,5 @@ export const defaultSessionManagerConfig: SessionManagerConfig = {
   autoSaveInterval: 30000, // 30秒
   maxConcurrentSessions: 5,
   sessionTimeout: 3600000, // 1時間
-  contextRetentionSize: 100
+  contextRetentionSize: 100,
 };

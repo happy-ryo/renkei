@@ -339,8 +339,8 @@ export class QualityEvaluator extends EventEmitter {
         (total: number, file: any) => total + file.errorCount,
         0
       );
-    } catch (error) {
-      console.warn('Lint check failed:', error);
+    } catch {
+      console.warn('Lint check failed');
       return 0;
     }
   }
@@ -358,8 +358,8 @@ export class QualityEvaluator extends EventEmitter {
           (line) => line.includes('error TS') && !line.includes('Found ')
         );
       return errorLines.length;
-    } catch (error) {
-      console.warn('Type check failed:', error);
+    } catch {
+      console.warn('Type check failed');
       return 0;
     }
   }

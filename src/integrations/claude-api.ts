@@ -36,11 +36,13 @@ export class ClaudeAPI {
       apiKey: config.apiKey || process.env['CLAUDE_API_KEY'] || '',
       model: config.model || 'claude-sonnet-4-20250514',
       maxTokens: config.maxTokens || 4096,
-      temperature: config.temperature || 0.7
+      temperature: config.temperature || 0.7,
     };
 
     if (!this.config.apiKey) {
-      console.warn('⚠️  CLAUDE_API_KEY が設定されていません。環境変数またはconfigで設定してください。');
+      console.warn(
+        '⚠️  CLAUDE_API_KEY が設定されていません。環境変数またはconfigで設定してください。'
+      );
     }
   }
 
@@ -59,14 +61,14 @@ export class ClaudeAPI {
 
       // メッセージ履歴の構築
       const messages: ClaudeMessage[] = [];
-      
+
       if (includeHistory) {
         messages.push(...this.conversationHistory);
       }
-      
+
       messages.push({
         role: 'user',
-        content: userMessage
+        content: userMessage,
       });
 
       // API リクエストの構築
@@ -74,22 +76,22 @@ export class ClaudeAPI {
         model: this.config.model,
         max_tokens: this.config.maxTokens,
         temperature: this.config.temperature,
-        messages
+        messages,
       };
 
       if (systemPrompt) {
         requestBody.system = systemPrompt;
       }
 
-      // Claude APIへのリクエスト
-      const response = await fetch('https://api.anthropic.com/v1/messages', {
+      // Claude APIへのリクエスト (global fetchを使用)
+      const response = await (global as any).fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'x-api-key': this.config.apiKey,
-          'anthropic-version': '2023-06-01'
+          'anthropic-version': '2023-06-01',
         },
-        body: JSON.stringify(requestBody)
+        body: JSON.stringify(requestBody),
       });
 
       if (!response.ok) {
@@ -97,13 +99,13 @@ export class ClaudeAPI {
         throw new Error(`Claude API error: ${response.status} - ${errorText}`);
       }
 
-      const result = await response.json() as any;
-      
+      const result = (await response.json()) as any;
+
       // レスポンスの処理
       const claudeResponse: ClaudeResponse = {
         content: result.content?.[0]?.text || '',
         usage: result.usage || { input_tokens: 0, output_tokens: 0 },
-        stop_reason: result.stop_reason || 'unknown'
+        stop_reason: result.stop_reason || 'unknown',
       };
 
       // 会話履歴の更新
@@ -120,10 +122,11 @@ export class ClaudeAPI {
       }
 
       return claudeResponse;
-
     } catch (error) {
       console.error('Claude API Error:', error);
-      throw new Error(`Failed to communicate with Claude API: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      throw new Error(
+        `Failed to communicate with Claude API: ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
     }
   }
 
@@ -155,7 +158,7 @@ export class ClaudeAPI {
 作業ディレクトリ: ${context.workingDirectory}
 
 現在のファイル構造:
-${context.fileStructure.map(file => `- ${file}`).join('\n')}
+${context.fileStructure.map((file) => `- ${file}`).join('\n')}
 
 あなたの役割:
 1. ユーザーのタスクを理解し、具体的な実装計画を立てる
@@ -175,7 +178,10 @@ ${context.fileStructure.map(file => `- ${file}`).join('\n')}
   /**
    * タスクプロンプトの構築
    */
-  private buildTaskPrompt(taskDescription: string, context: ProjectContext): string {
+  private buildTaskPrompt(
+    taskDescription: string,
+    context: ProjectContext
+  ): string {
     return `以下のタスクを実行してください:
 
 ${taskDescription}
@@ -229,7 +235,9 @@ export interface ProjectContext {
  * プロジェクトコンテキストの収集
  */
 export class ProjectContextCollector {
-  async collectContext(workingDirectory: string = process.cwd()): Promise<ProjectContext> {
+  async collectContext(
+    workingDirectory: string = process.cwd()
+  ): Promise<ProjectContext> {
     const fs = require('fs');
     const path = require('path');
     const { execSync } = require('child_process');
@@ -238,16 +246,21 @@ export class ProjectContextCollector {
       // package.json の読み込み
       let projectName = 'Unknown';
       let description = '';
-      let frameworks: string[] = [];
-      
+      const frameworks: string[] = [];
+
       const packageJsonPath = path.join(workingDirectory, 'package.json');
       if (fs.existsSync(packageJsonPath)) {
-        const packageData = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
+        const packageData = JSON.parse(
+          fs.readFileSync(packageJsonPath, 'utf8')
+        );
         projectName = packageData.name || 'Unknown';
         description = packageData.description || '';
-        
+
         // 依存関係からフレームワークを推測
-        const deps = { ...packageData.dependencies, ...packageData.devDependencies };
+        const deps = {
+          ...packageData.dependencies,
+          ...packageData.devDependencies,
+        };
         if (deps.react) frameworks.push('React');
         if (deps.vue) frameworks.push('Vue');
         if (deps.angular) frameworks.push('Angular');
@@ -274,21 +287,23 @@ export class ProjectContextCollector {
       // Git ステータス
       let gitStatus = 'Not a git repository';
       try {
-        const status = execSync('git status --porcelain', { 
-          cwd: workingDirectory, 
+        const status = execSync('git status --porcelain', {
+          cwd: workingDirectory,
           encoding: 'utf8',
-          stdio: 'pipe'
+          stdio: 'pipe',
         });
-        const branch = execSync('git branch --show-current', { 
-          cwd: workingDirectory, 
+        const branch = execSync('git branch --show-current', {
+          cwd: workingDirectory,
           encoding: 'utf8',
-          stdio: 'pipe'
+          stdio: 'pipe',
         }).trim();
-        
+
         if (status.trim() === '') {
           gitStatus = `Branch: ${branch} (clean)`;
         } else {
-          const changes = status.split('\n').filter((line: string) => line.trim()).length;
+          const changes = status
+            .split('\n')
+            .filter((line: string) => line.trim()).length;
           gitStatus = `Branch: ${branch} (${changes} changes)`;
         }
       } catch (error) {
@@ -304,12 +319,13 @@ export class ProjectContextCollector {
         fileStructure,
         lastModifiedFiles,
         runningProcesses,
-        gitStatus
+        gitStatus,
       };
-
     } catch (error) {
       console.error('Context collection error:', error);
-      throw new Error(`Failed to collect project context: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      throw new Error(
+        `Failed to collect project context: ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
     }
   }
 
@@ -324,12 +340,17 @@ export class ProjectContextCollector {
       try {
         const items = fs.readdirSync(dir);
         for (const item of items) {
-          if (item.startsWith('.') || item === 'node_modules' || item === 'dist') continue;
-          
+          if (
+            item.startsWith('.') ||
+            item === 'node_modules' ||
+            item === 'dist'
+          )
+            continue;
+
           const fullPath = path.join(dir, item);
           const relativePath = path.relative(workingDirectory, fullPath);
           const stat = fs.statSync(fullPath);
-          
+
           if (stat.isDirectory()) {
             files.push(`${relativePath}/`);
             walk(fullPath, depth + 1);
@@ -349,17 +370,22 @@ export class ProjectContextCollector {
   private getRecentlyModifiedFiles(workingDirectory: string): string[] {
     const fs = require('fs');
     const path = require('path');
-    const files: Array<{path: string, mtime: Date}> = [];
+    const files: Array<{ path: string; mtime: Date }> = [];
 
     const walk = (dir: string) => {
       try {
         const items = fs.readdirSync(dir);
         for (const item of items) {
-          if (item.startsWith('.') || item === 'node_modules' || item === 'dist') continue;
-          
+          if (
+            item.startsWith('.') ||
+            item === 'node_modules' ||
+            item === 'dist'
+          )
+            continue;
+
           const fullPath = path.join(dir, item);
           const stat = fs.statSync(fullPath);
-          
+
           if (stat.isFile()) {
             const relativePath = path.relative(workingDirectory, fullPath);
             files.push({ path: relativePath, mtime: stat.mtime });
@@ -373,20 +399,20 @@ export class ProjectContextCollector {
     };
 
     walk(workingDirectory);
-    
+
     // 最近の5ファイルを返す
     return files
       .sort((a, b) => b.mtime.getTime() - a.mtime.getTime())
       .slice(0, 5)
-      .map(f => f.path);
+      .map((f) => f.path);
   }
 
   private getRunningProcesses(): string[] {
     try {
       const { execSync } = require('child_process');
-      const sessions = execSync('tmux list-sessions -F "#{session_name}"', { 
+      const sessions = execSync('tmux list-sessions -F "#{session_name}"', {
         encoding: 'utf8',
-        stdio: 'pipe'
+        stdio: 'pipe',
       });
       return sessions.trim().split('\n').filter(Boolean);
     } catch (error) {
