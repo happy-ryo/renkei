@@ -8,6 +8,8 @@ export interface RenkeiConfig {
     tmux: TmuxConfig;
     claude: ClaudeConfig;
     permissions: PermissionConfig;
+    limits?: LimitsConfig;
+    logging?: LoggingConfig;
 }
 export interface TmuxConfig {
     sessionName: string;
@@ -22,6 +24,7 @@ export interface ClaudeConfig {
     timeout: number;
     outputFormat: 'json' | 'text';
     allowedTools: string[];
+    autoApprove?: boolean;
 }
 export interface PermissionConfig {
     permissions: {
@@ -30,6 +33,19 @@ export interface PermissionConfig {
     };
     autoApprove: boolean;
     dangerousCommands: string[];
+    allowedCommands?: string[];
+    deniedCommands?: string[];
+}
+export interface LimitsConfig {
+    maxFileSize?: number;
+    maxExecutionTime?: number;
+    maxMemoryUsage?: number;
+    maxApiCalls?: number;
+}
+export interface LoggingConfig {
+    commandLogging?: boolean;
+    level?: 'debug' | 'info' | 'warn' | 'error';
+    outputFile?: string;
 }
 export interface TaskRequest {
     id: string;

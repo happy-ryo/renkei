@@ -8,8 +8,8 @@ import {
   RenkeiConfig,
   UserPreferences,
   SystemInfo,
-  ErrorCode,
   RenkeiError,
+  ErrorSeverity,
   DeepPartial,
 } from '../interfaces/types';
 
@@ -38,9 +38,10 @@ export class ConfigManager {
       await this.validateConfig();
     } catch (error) {
       throw new RenkeiError(
-        ErrorCode.CONFIG_ERROR,
         '設定の初期化に失敗しました',
-        error instanceof Error ? error.message : String(error)
+        'CONFIG_ERROR',
+        ErrorSeverity.ERROR,
+        error
       );
     }
   }
@@ -64,9 +65,10 @@ export class ConfigManager {
       return this.config;
     } catch (error) {
       throw new RenkeiError(
-        ErrorCode.CONFIG_ERROR,
         '設定ファイルの読み込みに失敗しました',
-        error instanceof Error ? error.message : String(error)
+        'CONFIG_ERROR',
+        ErrorSeverity.ERROR,
+        error
       );
     }
   }
@@ -77,7 +79,11 @@ export class ConfigManager {
   async saveConfig(config?: RenkeiConfig): Promise<void> {
     const configToSave = config || this.config;
     if (!configToSave) {
-      throw new RenkeiError(ErrorCode.CONFIG_ERROR, '保存する設定がありません');
+      throw new RenkeiError(
+        '保存する設定がありません',
+        'CONFIG_ERROR',
+        ErrorSeverity.ERROR
+      );
     }
 
     try {
@@ -89,9 +95,10 @@ export class ConfigManager {
       this.config = configToSave;
     } catch (error) {
       throw new RenkeiError(
-        ErrorCode.CONFIG_ERROR,
         '設定ファイルの保存に失敗しました',
-        error instanceof Error ? error.message : String(error)
+        'CONFIG_ERROR',
+        ErrorSeverity.ERROR,
+        error
       );
     }
   }
@@ -102,8 +109,9 @@ export class ConfigManager {
   getConfig(): RenkeiConfig {
     if (!this.config) {
       throw new RenkeiError(
-        ErrorCode.CONFIG_ERROR,
-        '設定が初期化されていません'
+        '設定が初期化されていません',
+        'CONFIG_ERROR',
+        ErrorSeverity.ERROR
       );
     }
     return this.config;
@@ -115,8 +123,9 @@ export class ConfigManager {
   async updateConfig(updates: DeepPartial<RenkeiConfig>): Promise<void> {
     if (!this.config) {
       throw new RenkeiError(
-        ErrorCode.CONFIG_ERROR,
-        '設定が初期化されていません'
+        '設定が初期化されていません',
+        'CONFIG_ERROR',
+        ErrorSeverity.ERROR
       );
     }
 
@@ -126,9 +135,10 @@ export class ConfigManager {
       await this.saveConfig();
     } catch (error) {
       throw new RenkeiError(
-        ErrorCode.CONFIG_ERROR,
         '設定の更新に失敗しました',
-        error instanceof Error ? error.message : String(error)
+        'CONFIG_ERROR',
+        ErrorSeverity.ERROR,
+        error
       );
     }
   }
@@ -184,9 +194,10 @@ export class ConfigManager {
       );
     } catch (error) {
       throw new RenkeiError(
-        ErrorCode.CONFIG_ERROR,
         'ClaudeCode設定ファイルの生成に失敗しました',
-        error instanceof Error ? error.message : String(error)
+        'CONFIG_ERROR',
+        ErrorSeverity.ERROR,
+        error
       );
     }
   }
@@ -215,9 +226,10 @@ export class ConfigManager {
       await this.saveConfig(defaultConfig);
     } catch (error) {
       throw new RenkeiError(
-        ErrorCode.CONFIG_ERROR,
         '設定のリセットに失敗しました',
-        error instanceof Error ? error.message : String(error)
+        'CONFIG_ERROR',
+        ErrorSeverity.ERROR,
+        error
       );
     }
   }
@@ -239,9 +251,10 @@ export class ConfigManager {
       return backupPath;
     } catch (error) {
       throw new RenkeiError(
-        ErrorCode.CONFIG_ERROR,
         '設定のバックアップに失敗しました',
-        error instanceof Error ? error.message : String(error)
+        'CONFIG_ERROR',
+        ErrorSeverity.ERROR,
+        error
       );
     }
   }

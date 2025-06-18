@@ -10,6 +10,8 @@ export interface RenkeiConfig {
   tmux: TmuxConfig;
   claude: ClaudeConfig;
   permissions: PermissionConfig;
+  limits?: LimitsConfig;
+  logging?: LoggingConfig;
 }
 
 export interface TmuxConfig {
@@ -26,6 +28,7 @@ export interface ClaudeConfig {
   timeout: number;
   outputFormat: 'json' | 'text';
   allowedTools: string[];
+  autoApprove?: boolean;
 }
 
 export interface PermissionConfig {
@@ -35,14 +38,32 @@ export interface PermissionConfig {
   };
   autoApprove: boolean;
   dangerousCommands: string[];
+  allowedCommands?: string[];
+  deniedCommands?: string[];
+}
+
+export interface LimitsConfig {
+  maxFileSize?: number;
+  maxExecutionTime?: number;
+  maxMemoryUsage?: number;
+  maxApiCalls?: number;
+}
+
+export interface LoggingConfig {
+  commandLogging?: boolean;
+  level?: 'debug' | 'info' | 'warn' | 'error';
+  outputFile?: string;
 }
 
 // タスク関連の型
 export interface TaskRequest {
   id: string;
   userPrompt: string;
-  timestamp: Date;
+  description: string;
+  workingDirectory: string;
   priority: 'low' | 'medium' | 'high';
+  deadline?: Date;
+  timestamp: Date;
   context?: TaskContext;
 }
 
@@ -137,10 +158,19 @@ export enum ErrorCode {
   VALIDATION_ERROR = 'VALIDATION_ERROR',
 }
 
+export enum ErrorSeverity {
+  INFO = 'info',
+  WARNING = 'warning',
+  ERROR = 'error',
+  CRITICAL = 'critical'
+}
+
 export class RenkeiError extends Error {
   constructor(
-    public code: ErrorCode,
     message: string,
+    public code: string,
+    public severity: ErrorSeverity,
+    public originalError?: unknown,
     public details?: string
   ) {
     super(message);
@@ -209,4 +239,100 @@ export interface SystemInfo {
   tmuxVersion?: string | undefined;
   claudeCodeVersion?: string | undefined;
   renkeiVersion: string;
+}
+
+// AI Manager関連の型定義
+export interface AIManagerConfig {
+  analysisTimeout: number;
+  planningTimeout: number;
+  executionTimeout: number;
+  maxRetries: number;
+  qualityThreshold: number;
+}
+
+export interface TaskPlan {
+  id: string;
+  title: string;
+  description: string;
+  phases: TaskPhase[];
+  prerequisites: string[];
+  deliverables: string[];
+  successCriteria: string[];
+  riskAssessment: RiskAssessment;
+  createdAt: Date;
+  estimatedDuration: number;
+  confidence: number;
+}
+
+export interface TaskPhase {
+  id: string;
+  name: string;
+  description: string;
+  steps: TaskStep[];
+  deliverables: string[];
+}
+
+export interface TaskStep {
+  id: string;
+  description: string;
+  type: 'create_file' | 'modify_file' | 'run_command' | 'test';
+  target: string;
+  content: string;
+  dependencies: string[];
+  estimatedTime: string;
+}
+
+export interface RiskAssessment {
+  overall: 'LOW' | 'MEDIUM' | 'HIGH';
+  risks: Risk[];
+  recommendations: string[];
+  blockers: string[];
+}
+
+export interface Risk {
+  id: string;
+  description: string;
+  severity: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+  probability: 'LOW' | 'MEDIUM' | 'HIGH';
+  impact: string;
+  mitigation: string;
+  contingency: string;
+}
+
+export interface ExecutionResult {
+  taskId: string;
+  success: boolean;
+  duration: number;
+  results: any[];
+  metrics: any;
+  completedAt: Date;
+}
+
+export enum TaskStatus {
+  IDLE = 'idle',
+  ANALYZING = 'analyzing',
+  EXECUTING = 'executing',
+  COMPLETED = 'completed',
+  ERROR = 'error',
+  STOPPING = 'stopping',
+  STOPPED = 'stopped'
+}
+
+export enum AIManagerEvents {
+  TASK_ANALYSIS_STARTED = 'task_analysis_started',
+  TASK_ANALYSIS_COMPLETED = 'task_analysis_completed',
+  NATURAL_LANGUAGE_ANALYSIS_COMPLETED = 'natural_language_analysis_completed',
+  IMPLEMENTATION_PLAN_GENERATED = 'implementation_plan_generated',
+  RISK_ASSESSMENT_COMPLETED = 'risk_assessment_completed',
+  TASK_EXECUTION_STARTED = 'task_execution_started',
+  TASK_EXECUTION_COMPLETED = 'task_execution_completed',
+  PHASE_STARTED = 'phase_started',
+  PHASE_COMPLETED = 'phase_completed',
+  STEP_STARTED = 'step_started',
+  STEP_COMPLETED = 'step_completed',
+  STEP_FAILED = 'step_failed',
+  EXECUTION_PAUSED = 'execution_paused',
+  TASK_STOPPING = 'task_stopping',
+  TASK_STOPPED = 'task_stopped',
+  ERROR = 'error'
 }

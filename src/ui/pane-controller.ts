@@ -5,7 +5,7 @@
 
 import { EventEmitter } from 'events';
 import { TmuxManager, SplitDirection } from './tmux-manager';
-import { PaneState, RenkeiError, ErrorCode } from '../interfaces/types';
+import { PaneState, RenkeiError, ErrorSeverity } from '../interfaces/types';
 
 export interface PaneLayout {
   main: PaneConfig;
@@ -47,8 +47,9 @@ export class PaneController extends EventEmitter {
     const session = await this.tmuxManager.getSessionStatus(sessionId);
     if (!session) {
       throw new RenkeiError(
-        ErrorCode.SESSION_ERROR,
-        `Session not found: ${sessionId}`
+        `Session not found: ${sessionId}`,
+        'SESSION_ERROR',
+        ErrorSeverity.ERROR
       );
     }
 
@@ -73,8 +74,10 @@ export class PaneController extends EventEmitter {
       this.emit('layout_created', { sessionId, layout });
     } catch (error) {
       throw new RenkeiError(
-        ErrorCode.TMUX_ERROR,
         `Failed to create layout: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        'TMUX_ERROR',
+        ErrorSeverity.ERROR,
+        error,
         `Session: ${sessionId}`
       );
     }
@@ -87,8 +90,9 @@ export class PaneController extends EventEmitter {
     const currentLayout = this.paneLayouts.get(sessionId);
     if (!currentLayout) {
       throw new RenkeiError(
-        ErrorCode.SESSION_ERROR,
-        `No layout found for session: ${sessionId}`
+        `No layout found for session: ${sessionId}`,
+        'SESSION_ERROR',
+        ErrorSeverity.ERROR
       );
     }
 
@@ -192,8 +196,10 @@ export class PaneController extends EventEmitter {
       this.emit('pane_scrolled', { paneId, direction, lines });
     } catch (error) {
       throw new RenkeiError(
-        ErrorCode.TMUX_ERROR,
         `Failed to scroll pane: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        'TMUX_ERROR',
+        ErrorSeverity.ERROR,
+        error,
         `Pane: ${paneId}, Direction: ${direction}`
       );
     }
@@ -243,8 +249,10 @@ export class PaneController extends EventEmitter {
       this.emit('panes_swapped', { paneId1, paneId2 });
     } catch (error) {
       throw new RenkeiError(
-        ErrorCode.TMUX_ERROR,
         `Failed to swap panes: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        'TMUX_ERROR',
+        ErrorSeverity.ERROR,
+        error,
         `Panes: ${paneId1}, ${paneId2}`
       );
     }
@@ -263,8 +271,10 @@ export class PaneController extends EventEmitter {
       return windowName;
     } catch (error) {
       throw new RenkeiError(
-        ErrorCode.TMUX_ERROR,
         `Failed to break pane: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        'TMUX_ERROR',
+        ErrorSeverity.ERROR,
+        error,
         `Pane: ${paneId}`
       );
     }

@@ -1,31 +1,72 @@
 {
   "permissions": {
     "allow": [
-      "Write",
-      "Read",
-      "Edit",
-      "MultiEdit",
-      "Bash(npm:*)",
-      "Bash(git:*)",
-      "Bash(mkdir:*)",
-      "Bash(ls:*)",
-      "Bash(pwd)",
-      "Bash(cat:*)",
-      "Bash(echo:*)",
-      "Bash(touch:*)",
-      "Bash(cp:*)",
-      "Bash(mv:*)",
-      "ListFiles",
-      "SearchFiles"
+      "*"
     ],
     "deny": [
-      "Bash(rm:*)",
-      "Bash(sudo:*)",
-      "Bash(chmod:*)",
-      "Bash(chown:*)",
-      "WebFetch",
-      "WebSearch"
+      "rm -rf",
+      "sudo",
+      "chmod +x",
+      "dd if=",
+      "mkfs",
+      "fdisk",
+      "parted"
     ]
   },
-  "autoApprove": true
+  "autoApprove": false,
+  "workspaceRestrictions": {
+    "allowedDirectories": [
+      "/home/happy_ryo/work/renkei",
+      "/home/happy_ryo/work/renkei/workspace",
+      "/home/happy_ryo/work/renkei/data",
+      "/home/happy_ryo/work/renkei/src",
+      "/home/happy_ryo/work/renkei/docs"
+    ],
+    "forbiddenDirectories": [
+      "/etc",
+      "/var",
+      "/sys",
+      "/proc",
+      "/boot",
+      "/root",
+      "/home/*/.ssh",
+      "/home/*/.aws"
+    ],
+    "maxFileSize": 10485760
+  },
+  "executionLimits": {
+    "maxExecutionTime": 300000,
+    "maxMemoryUsage": 536870912,
+    "maxApiCalls": 100
+  },
+  "security": {
+    "dangerousCommands": [
+      "rm -rf",
+      "sudo",
+      "chmod",
+      "chown",
+      "dd",
+      "mkfs",
+      "fdisk",
+      "parted",
+      "mount",
+      "umount",
+      "systemctl",
+      "service",
+      "kill -9",
+      "killall"
+    ],
+    "requireConfirmation": [
+      "npm install",
+      "yarn install",
+      "pip install",
+      "git clone",
+      "git push",
+      "git reset --hard",
+      "git clean -fd",
+      "docker run",
+      "docker build"
+    ],
+    "logAllCommands": true
+  }
 }

@@ -1,7 +1,7 @@
 /**
  * Renkei System - 設定管理システム
  */
-import { RenkeiConfig, UserPreferences, SystemInfo, DeepPartial } from '../interfaces/types.js';
+import { RenkeiConfig, UserPreferences, SystemInfo, DeepPartial } from '../interfaces/types';
 export declare class ConfigManager {
     private config;
     private readonly configPath;

@@ -39,7 +39,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.configManager = exports.ConfigManager = void 0;
 const fs = __importStar(require("fs/promises"));
 const path = __importStar(require("path"));
-const types_js_1 = require("../interfaces/types.js");
+const types_1 = require("../interfaces/types");
 class ConfigManager {
     constructor(configDir = './config', userConfigDir = './data') {
         this.config = null;
@@ -57,7 +57,7 @@ class ConfigManager {
             await this.validateConfig();
         }
         catch (error) {
-            throw new types_js_1.RenkeiError(types_js_1.ErrorCode.CONFIG_ERROR, '設定の初期化に失敗しました', error instanceof Error ? error.message : String(error));
+            throw new types_1.RenkeiError(types_1.ErrorCode.CONFIG_ERROR, '設定の初期化に失敗しました', error instanceof Error ? error.message : String(error));
         }
     }
     /**
@@ -79,7 +79,7 @@ class ConfigManager {
             return this.config;
         }
         catch (error) {
-            throw new types_js_1.RenkeiError(types_js_1.ErrorCode.CONFIG_ERROR, '設定ファイルの読み込みに失敗しました', error instanceof Error ? error.message : String(error));
+            throw new types_1.RenkeiError(types_1.ErrorCode.CONFIG_ERROR, '設定ファイルの読み込みに失敗しました', error instanceof Error ? error.message : String(error));
         }
     }
     /**
@@ -88,14 +88,14 @@ class ConfigManager {
     async saveConfig(config) {
         const configToSave = config || this.config;
         if (!configToSave) {
-            throw new types_js_1.RenkeiError(types_js_1.ErrorCode.CONFIG_ERROR, '保存する設定がありません');
+            throw new types_1.RenkeiError(types_1.ErrorCode.CONFIG_ERROR, '保存する設定がありません');
         }
         try {
             await fs.writeFile(this.configPath, JSON.stringify(configToSave, null, 2), 'utf-8');
             this.config = configToSave;
         }
         catch (error) {
-            throw new types_js_1.RenkeiError(types_js_1.ErrorCode.CONFIG_ERROR, '設定ファイルの保存に失敗しました', error instanceof Error ? error.message : String(error));
+            throw new types_1.RenkeiError(types_1.ErrorCode.CONFIG_ERROR, '設定ファイルの保存に失敗しました', error instanceof Error ? error.message : String(error));
         }
     }
     /**
@@ -103,7 +103,7 @@ class ConfigManager {
      */
     getConfig() {
         if (!this.config) {
-            throw new types_js_1.RenkeiError(types_js_1.ErrorCode.CONFIG_ERROR, '設定が初期化されていません');
+            throw new types_1.RenkeiError(types_1.ErrorCode.CONFIG_ERROR, '設定が初期化されていません');
         }
         return this.config;
     }
@@ -112,7 +112,7 @@ class ConfigManager {
      */
     async updateConfig(updates) {
         if (!this.config) {
-            throw new types_js_1.RenkeiError(types_js_1.ErrorCode.CONFIG_ERROR, '設定が初期化されていません');
+            throw new types_1.RenkeiError(types_1.ErrorCode.CONFIG_ERROR, '設定が初期化されていません');
         }
         try {
             this.config = this.mergeConfig(this.config, updates);
@@ -120,7 +120,7 @@ class ConfigManager {
             await this.saveConfig();
         }
         catch (error) {
-            throw new types_js_1.RenkeiError(types_js_1.ErrorCode.CONFIG_ERROR, '設定の更新に失敗しました', error instanceof Error ? error.message : String(error));
+            throw new types_1.RenkeiError(types_1.ErrorCode.CONFIG_ERROR, '設定の更新に失敗しました', error instanceof Error ? error.message : String(error));
         }
     }
     /**
@@ -128,13 +128,13 @@ class ConfigManager {
      */
     getUserPreferences() {
         const config = this.getConfig();
-        return config.userPreferences || {
+        return (config.userPreferences || {
             theme: 'dark',
             language: 'ja',
             notifications: true,
             autoSave: true,
-            debugMode: false
-        };
+            debugMode: false,
+        });
     }
     /**
      * ユーザー設定を更新
@@ -143,7 +143,7 @@ class ConfigManager {
         const currentPreferences = this.getUserPreferences();
         const updatedPreferences = { ...currentPreferences, ...preferences };
         await this.updateConfig({
-            userPreferences: updatedPreferences
+            userPreferences: updatedPreferences,
         });
     }
     /**
@@ -153,7 +153,7 @@ class ConfigManager {
         const config = this.getConfig();
         const claudeSettings = {
             permissions: config.permissions.permissions,
-            autoApprove: config.permissions.autoApprove
+            autoApprove: config.permissions.autoApprove,
         };
         const settingsPath = path.join(config.workspaceDir, 'settings.json');
         try {
@@ -161,7 +161,7 @@ class ConfigManager {
             await fs.writeFile(settingsPath, JSON.stringify(claudeSettings, null, 2), 'utf-8');
         }
         catch (error) {
-            throw new types_js_1.RenkeiError(types_js_1.ErrorCode.CONFIG_ERROR, 'ClaudeCode設定ファイルの生成に失敗しました', error instanceof Error ? error.message : String(error));
+            throw new types_1.RenkeiError(types_1.ErrorCode.CONFIG_ERROR, 'ClaudeCode設定ファイルの生成に失敗しました', error instanceof Error ? error.message : String(error));
         }
     }
     /**
@@ -174,7 +174,7 @@ class ConfigManager {
             nodeVersion: process.version,
             tmuxVersion: await this.getTmuxVersion(),
             claudeCodeVersion: await this.getClaudeCodeVersion(),
-            renkeiVersion: packageJson.version || '1.0.0'
+            renkeiVersion: packageJson.version || '1.0.0',
         };
     }
     /**
@@ -186,7 +186,7 @@ class ConfigManager {
             await this.saveConfig(defaultConfig);
         }
         catch (error) {
-            throw new types_js_1.RenkeiError(types_js_1.ErrorCode.CONFIG_ERROR, '設定のリセットに失敗しました', error instanceof Error ? error.message : String(error));
+            throw new types_1.RenkeiError(types_1.ErrorCode.CONFIG_ERROR, '設定のリセットに失敗しました', error instanceof Error ? error.message : String(error));
         }
     }
     /**
@@ -202,7 +202,7 @@ class ConfigManager {
             return backupPath;
         }
         catch (error) {
-            throw new types_js_1.RenkeiError(types_js_1.ErrorCode.CONFIG_ERROR, '設定のバックアップに失敗しました', error instanceof Error ? error.message : String(error));
+            throw new types_1.RenkeiError(types_1.ErrorCode.CONFIG_ERROR, '設定のバックアップに失敗しました', error instanceof Error ? error.message : String(error));
         }
     }
     // プライベートメソッド
@@ -242,10 +242,12 @@ class ConfigManager {
             throw new Error('Claudeタイムアウトは1000ms以上である必要があります');
         }
         // 許可設定の検証
-        if (!config.permissions?.permissions?.allow || !Array.isArray(config.permissions.permissions.allow)) {
+        if (!config.permissions?.permissions?.allow ||
+            !Array.isArray(config.permissions.permissions.allow)) {
             throw new Error('許可リストが必要です');
         }
-        if (!config.permissions?.permissions?.deny || !Array.isArray(config.permissions.permissions.deny)) {
+        if (!config.permissions?.permissions?.deny ||
+            !Array.isArray(config.permissions.permissions.deny)) {
             throw new Error('拒否リストが必要です');
         }
     }
@@ -253,7 +255,9 @@ class ConfigManager {
         const result = { ...base };
         for (const [key, value] of Object.entries(updates)) {
             if (value !== undefined) {
-                if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+                if (typeof value === 'object' &&
+                    value !== null &&
+                    !Array.isArray(value)) {
                     result[key] = { ...base[key], ...value };
                 }
                 else {
@@ -266,7 +270,7 @@ class ConfigManager {
     async ensureDirectories() {
         const dirs = [
             path.dirname(this.userConfigPath),
-            path.dirname(this.defaultConfigPath)
+            path.dirname(this.defaultConfigPath),
         ];
         for (const dir of dirs) {
             await this.ensureDirectory(dir);
