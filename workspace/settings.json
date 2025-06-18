@@ -1,0 +1,31 @@
+{
+  "permissions": {
+    "allow": [
+      "Write",
+      "Read",
+      "Edit",
+      "MultiEdit",
+      "Bash(npm:*)",
+      "Bash(git:*)",
+      "Bash(mkdir:*)",
+      "Bash(ls:*)",
+      "Bash(pwd)",
+      "Bash(cat:*)",
+      "Bash(echo:*)",
+      "Bash(touch:*)",
+      "Bash(cp:*)",
+      "Bash(mv:*)",
+      "ListFiles",
+      "SearchFiles"
+    ],
+    "deny": [
+      "Bash(rm:*)",
+      "Bash(sudo:*)",
+      "Bash(chmod:*)",
+      "Bash(chown:*)",
+      "WebFetch",
+      "WebSearch"
+    ]
+  },
+  "autoApprove": true
+}

@@ -1,0 +1,60 @@
+{
+  "name": "renkei",
+  "version": "1.0.0",
+  "description": "tmuxベースのAI協調開発環境",
+  "main": "dist/index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "ts-node src/index.ts",
+    "start": "node dist/index.js",
+    "watch": "nodemon --exec ts-node src/index.ts",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "bin": {
+    "renkei-setup": "./scripts/renkei-setup",
+    "renkei-start": "./scripts/renkei-start",
+    "renkei-stop": "./scripts/renkei-stop"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/happy-ryo/renkei.git"
+  },
+  "keywords": [
+    "ai",
+    "development",
+    "tmux",
+    "claude",
+    "automation"
+  ],
+  "author": "happy_ryo <iwama.ryo.0731@gmail.com>",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/happy-ryo/renkei/issues"
+  },
+  "homepage": "https://github.com/happy-ryo/renkei#readme",
+  "dependencies": {
+    "@anthropic-ai/claude-code": "^1.0.0",
+    "chalk": "^5.3.0",
+    "commander": "^12.1.0",
+    "inquirer": "^10.2.2",
+    "ora": "^8.1.0",
+    "uuid": "^10.0.0"
+  },
+  "devDependencies": {
+    "@types/inquirer": "^9.0.7",
+    "@types/node": "^22.9.0",
+    "@types/uuid": "^10.0.0",
+    "nodemon": "^3.1.7",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.6.3"
+  },
+  "files": [
+    "dist/",
+    "scripts/",
+    "config/",
+    "docs/"
+  ]
+}

@@ -1,0 +1,73 @@
+{
+  "version": "1.0.0",
+  "workspaceDir": "./workspace",
+  "sessionDir": "./data/sessions",
+  "tmux": {
+    "sessionName": "renkei",
+    "mainPaneTitle": "AI Manager",
+    "subPaneTitle": "ClaudeCode Status",
+    "splitDirection": "horizontal",
+    "mainPaneSize": 70
+  },
+  "claude": {
+    "maxTurns": 10,
+    "timeout": 300000,
+    "outputFormat": "json",
+    "allowedTools": [
+      "Write",
+      "Read",
+      "Edit",
+      "MultiEdit",
+      "Bash",
+      "ListFiles",
+      "SearchFiles"
+    ]
+  },
+  "permissions": {
+    "permissions": {
+      "allow": [
+        "Write",
+        "Read",
+        "Edit",
+        "MultiEdit",
+        "Bash(npm:*)",
+        "Bash(git:*)",
+        "Bash(mkdir:*)",
+        "Bash(ls:*)",
+        "Bash(pwd)",
+        "Bash(cat:*)",
+        "Bash(echo:*)",
+        "Bash(touch:*)",
+        "Bash(cp:*)",
+        "Bash(mv:*)",
+        "ListFiles",
+        "SearchFiles"
+      ],
+      "deny": [
+        "Bash(rm:*)",
+        "Bash(sudo:*)",
+        "Bash(chmod:*)",
+        "Bash(chown:*)",
+        "WebFetch",
+        "WebSearch"
+      ]
+    },
+    "autoApprove": true,
+    "dangerousCommands": [
+      "rm -rf",
+      "sudo",
+      "chmod 777",
+      "dd if=",
+      "mkfs",
+      "fdisk",
+      "format"
+    ]
+  },
+  "userPreferences": {
+    "theme": "dark",
+    "language": "ja",
+    "notifications": true,
+    "autoSave": true,
+    "debugMode": false
+  }
+}
