@@ -200,13 +200,16 @@ function createTmuxSession(config) {
       
       logSuccess('3-pane tmux layout created manually');
       
-      return {
+      const result = {
         sessionName,
         mainPaneId,
         subPaneId: statusPaneId,
         chatPaneId,
         isExisting: false
       };
+      
+      logInfo(`Session info - Main: ${result.mainPaneId}, Status: ${result.subPaneId}, Chat: ${result.chatPaneId}`);
+      return result;
     } else {
       // ThreePaneLayoutを使用
       const { ThreePaneLayout } = require('../dist/ui/layouts/three-pane-layout');
@@ -227,13 +230,16 @@ function createTmuxSession(config) {
       
       logSuccess('3-pane tmux layout created with ThreePaneLayout');
       
-      return {
+      const result = {
         sessionName,
         mainPaneId: layoutResult.mainPaneId,
         subPaneId: layoutResult.statusPaneId,
         chatPaneId: layoutResult.chatPaneId,
         isExisting: false
       };
+      
+      logInfo(`Session info - Main: ${result.mainPaneId}, Status: ${result.subPaneId}, Chat: ${result.chatPaneId}`);
+      return result;
     }
     
   } catch (error) {
@@ -285,7 +291,8 @@ function startSystem(config, sessionInfo) {
     
     // チャットペインの初期化（チャットペインが存在する場合）
     if (chatPaneId) {
-      const chatCommand = `echo "💬 Interactive Chat Interface" && echo "Initializing chat system..." && echo "Type 'help' for available commands"`;
+      logInfo(`Initializing chat pane: ${chatPaneId}`);
+      const chatCommand = `echo "💬 Interactive Chat Interface" && echo "Initializing chat system..." && echo "Type 'help' for available commands" && echo "Chat pane is ready for future implementation"`;
       execSync(`tmux send-keys -t ${chatPaneId} "${chatCommand}" Enter`, { stdio: 'pipe' });
       logSuccess('Chat interface initialized');
     }
