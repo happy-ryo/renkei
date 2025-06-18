@@ -6,6 +6,8 @@
  */
 
 import { EventEmitter } from 'events';
+import { appendFileSync, existsSync, mkdirSync } from 'fs';
+import { join } from 'path';
 import {
   QualityEvaluator,
   EvaluationResult,
@@ -153,6 +155,7 @@ export class TaskManager extends EventEmitter {
   private config: TaskManagerConfig;
   private claudeIntegration: ClaudeIntegration;
   private qualityEvaluator: QualityEvaluator;
+  private logFilePath: string;
 
   private activeTasks = new Map<string, TaskContext>();
   private taskQueue: Task[] = [];
@@ -168,12 +171,17 @@ export class TaskManager extends EventEmitter {
     this.config = config;
     this.claudeIntegration = claudeIntegration;
 
+    // ログファイルパスを設定
+    this.logFilePath = join(process.cwd(), 'data', 'logs', 'renkei-worker.log');
+    this.ensureLogDirectory();
+
     // 品質評価器を初期化
     this.qualityEvaluator = createQualityEvaluator({
       projectPath: configManager.getConfig().workspaceDir,
     });
 
     this.setupEventHandlers();
+    this.logWorkerStatus('🚀 TaskManager initialized', 'info');
   }
 
   /**
@@ -187,11 +195,13 @@ export class TaskManager extends EventEmitter {
       );
 
       if (unmetDependencies.length > 0) {
+        this.logWorkerStatus(`⚠️ Task "${task.title}" has unmet dependencies: ${unmetDependencies.join(', ')}`, 'warn');
         throw new Error(`Unmet dependencies: ${unmetDependencies.join(', ')}`);
       }
     }
 
     this.taskQueue.push(task);
+    this.logWorkerStatus(`📋 Task "${task.title}" added to queue (Priority: ${task.priority})`);
     this.emit('taskQueued', { task });
 
     if (!this.isProcessing) {
@@ -215,23 +225,36 @@ export class TaskManager extends EventEmitter {
     try {
       context.status = 'planning';
       context.startTime = new Date();
+      this.logTaskEvent(taskId, '🚀 Started execution');
       this.emit('taskStarted', { context });
 
       // メイン実行ループ
       while (context.iterations.length < this.config.maxIterations) {
+        this.logTaskEvent(taskId, `⚙️ Starting iteration ${context.iterations.length + 1}/${this.config.maxIterations}`);
+        
         const iteration = await this.executeIteration(context);
         context.iterations.push(iteration);
+        context.metrics.iterationCount = context.iterations.length;
+
+        // 継続判断ログ
+        const decision = iteration.decision.decision;
+        const confidence = Math.round(iteration.decision.confidence * 100);
+        this.logTaskEvent(taskId, `🤔 Decision: ${decision} (${confidence}% confidence) - ${iteration.decision.reasoning}`);
 
         // 継続判断
         if (iteration.decision.decision === 'complete') {
           context.status = 'completed';
           context.endTime = new Date();
+          const duration = Math.round((context.endTime.getTime() - context.startTime!.getTime()) / 1000);
+          this.logTaskEvent(taskId, `✅ Completed successfully`, { duration: `${duration}s` });
           break;
         } else if (iteration.decision.decision === 'abort') {
           context.status = 'failed';
           context.endTime = new Date();
+          this.logTaskEvent(taskId, `❌ Aborted`, { error: iteration.decision.reasoning });
           break;
         } else if (iteration.decision.decision === 'escalate') {
+          this.logTaskEvent(taskId, `🔺 Escalating to human intervention`);
           await this.escalateTask(context);
           break;
         }
@@ -245,6 +268,7 @@ export class TaskManager extends EventEmitter {
             severity: 'high',
             message: 'Task execution timeout exceeded',
           });
+          this.logTaskEvent(taskId, `⏰ Timeout exceeded`, { error: 'Maximum duration reached' });
           break;
         }
       }
@@ -254,6 +278,7 @@ export class TaskManager extends EventEmitter {
         const finalEvaluation = await this.performFinalEvaluation();
         context.evaluationResults.push(finalEvaluation);
         context.metrics.qualityScore = finalEvaluation.metrics.overall.score;
+        this.logTaskEvent(taskId, `📊 Quality score: ${finalEvaluation.metrics.overall.score}%`);
       }
 
       this.emit('taskCompleted', { context });
@@ -268,6 +293,7 @@ export class TaskManager extends EventEmitter {
         message: error instanceof Error ? error.message : 'Unknown error',
       });
 
+      this.logTaskEvent(taskId, `💥 Execution failed`, { error: error instanceof Error ? error.message : 'Unknown error' });
       this.emit('taskFailed', { context, error });
       throw error;
     }
@@ -518,6 +544,7 @@ export class TaskManager extends EventEmitter {
     const task = this.taskQueue.shift()!;
 
     try {
+      this.logWorkerStatus(`📤 Processing task "${task.title}" from queue (${this.taskQueue.length} remaining)`);
       const context = this.createTaskContext(task);
       this.activeTasks.set(task.id, context);
 
@@ -525,9 +552,13 @@ export class TaskManager extends EventEmitter {
 
       // 次のタスクを処理
       if (this.taskQueue.length > 0) {
+        this.logWorkerStatus(`📋 ${this.taskQueue.length} tasks remaining in queue`);
         setTimeout(() => this.processNextTask(), 0);
+      } else {
+        this.logWorkerStatus(`✨ Task queue is now empty`);
       }
     } catch (error) {
+      this.logWorkerStatus(`💥 Failed to process task "${task.title}": ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
       this.emit('taskProcessingError', { task, error });
     } finally {
       this.isProcessing = false;
@@ -731,6 +762,48 @@ Generate a detailed execution plan for the next iteration.
 
   updateConfig(newConfig: Partial<TaskManagerConfig>): void {
     this.config = { ...this.config, ...newConfig };
+  }
+
+  /**
+   * ログ関連のメソッド
+   */
+  private ensureLogDirectory(): void {
+    const logDir = join(process.cwd(), 'data', 'logs');
+    if (!existsSync(logDir)) {
+      mkdirSync(logDir, { recursive: true });
+    }
+  }
+
+  private logWorkerStatus(message: string, level: 'info' | 'warn' | 'error' = 'info'): void {
+    const timestamp = new Date().toISOString();
+    const emoji = level === 'error' ? '❌' : level === 'warn' ? '⚠️' : 'ℹ️';
+    const logMessage = `[${timestamp}] ${emoji} ${message}`;
+    
+    try {
+      appendFileSync(this.logFilePath, logMessage + '\n');
+    } catch (error) {
+      console.error('Failed to write to log file:', error);
+    }
+  }
+
+  private logTaskEvent(taskId: string, event: string, details?: any): void {
+    const task = this.activeTasks.get(taskId);
+    const taskTitle = task?.task.title || taskId;
+    let message = `Task "${taskTitle}": ${event}`;
+    
+    if (details) {
+      if (details.progress !== undefined) {
+        message += ` (${details.progress}% complete)`;
+      }
+      if (details.duration !== undefined) {
+        message += ` [${details.duration}ms]`;
+      }
+      if (details.error) {
+        message += ` - Error: ${details.error}`;
+      }
+    }
+
+    this.logWorkerStatus(message);
   }
 }
 

@@ -5,7 +5,12 @@
 
 import { spawn, ChildProcess } from 'child_process';
 import { EventEmitter } from 'events';
-import { TmuxConfig, PaneState, RenkeiError, ErrorSeverity } from '../interfaces/types';
+import {
+  TmuxConfig,
+  PaneState,
+  RenkeiError,
+  ErrorSeverity,
+} from '../interfaces/types';
 
 export interface TmuxSession {
   sessionId: string;
@@ -62,7 +67,7 @@ export class TmuxManager extends EventEmitter {
         '-x',
         '120',
         '-y',
-        '40'
+        '40',
       ]);
 
       // メインペインの情報を取得
@@ -74,7 +79,7 @@ export class TmuxManager extends EventEmitter {
         sessionName: actualSessionName,
         mainPaneId,
         status: 'active',
-        createdAt: new Date()
+        createdAt: new Date(),
       };
 
       this.sessions.set(sessionId, session);
@@ -106,11 +111,7 @@ export class TmuxManager extends EventEmitter {
     }
 
     try {
-      await this.executeCommand([
-        'kill-session',
-        '-t',
-        session.sessionName
-      ]);
+      await this.executeCommand(['kill-session', '-t', session.sessionName]);
 
       this.sessions.delete(sessionId);
       this.emit('session_destroyed', session);
@@ -132,7 +133,10 @@ export class TmuxManager extends EventEmitter {
   /**
    * ペイン制御
    */
-  async splitPane(sessionId: string, direction: SplitDirection): Promise<string> {
+  async splitPane(
+    sessionId: string,
+    direction: SplitDirection
+  ): Promise<string> {
     const session = this.sessions.get(sessionId);
     if (!session) {
       throw new RenkeiError(
@@ -151,7 +155,7 @@ export class TmuxManager extends EventEmitter {
         session.sessionName,
         '-P',
         '-F',
-        '#{pane_id}'
+        '#{pane_id}',
       ]);
 
       const newPaneId = result.trim();
@@ -183,7 +187,7 @@ export class TmuxManager extends EventEmitter {
         '-t',
         paneId,
         '-x',
-        size.toString()
+        size.toString(),
       ]);
 
       this.emit('pane_resized', { paneId, size });
@@ -200,11 +204,7 @@ export class TmuxManager extends EventEmitter {
 
   async focusPane(paneId: string): Promise<void> {
     try {
-      await this.executeCommand([
-        'select-pane',
-        '-t',
-        paneId
-      ]);
+      await this.executeCommand(['select-pane', '-t', paneId]);
 
       this.emit('pane_focused', { paneId });
     } catch (error) {
@@ -225,7 +225,7 @@ export class TmuxManager extends EventEmitter {
     try {
       // 既存の内容をクリア
       await this.clearPane(paneId);
-      
+
       // 新しい内容を設定
       await this.appendToPaneContent(paneId, content);
 
@@ -248,23 +248,12 @@ export class TmuxManager extends EventEmitter {
     try {
       // 複数行の場合は行ごとに処理
       const lines = content.split('\n');
-      
+
       for (const line of lines) {
         if (line.trim()) {
-          await this.executeCommand([
-            'send-keys',
-            '-t',
-            paneId,
-            line,
-            'Enter'
-          ]);
+          await this.executeCommand(['send-keys', '-t', paneId, line, 'Enter']);
         } else {
-          await this.executeCommand([
-            'send-keys',
-            '-t',
-            paneId,
-            'Enter'
-          ]);
+          await this.executeCommand(['send-keys', '-t', paneId, 'Enter']);
         }
       }
 
@@ -282,20 +271,9 @@ export class TmuxManager extends EventEmitter {
 
   async clearPane(paneId: string): Promise<void> {
     try {
-      await this.executeCommand([
-        'send-keys',
-        '-t',
-        paneId,
-        'C-c'
-      ]);
+      await this.executeCommand(['send-keys', '-t', paneId, 'C-c']);
 
-      await this.executeCommand([
-        'send-keys',
-        '-t',
-        paneId,
-        'clear',
-        'Enter'
-      ]);
+      await this.executeCommand(['send-keys', '-t', paneId, 'clear', 'Enter']);
 
       this.emit('pane_cleared', { paneId });
     } catch (error) {
@@ -312,19 +290,17 @@ export class TmuxManager extends EventEmitter {
   /**
    * 入力処理
    */
-  async setupInputHandler(paneId: string, handler: InputHandler): Promise<void> {
+  async setupInputHandler(
+    paneId: string,
+    handler: InputHandler
+  ): Promise<void> {
     this.inputHandlers.set(paneId, handler);
     this.emit('input_handler_setup', { paneId });
   }
 
   async sendKeys(paneId: string, keys: string): Promise<void> {
     try {
-      await this.executeCommand([
-        'send-keys',
-        '-t',
-        paneId,
-        keys
-      ]);
+      await this.executeCommand(['send-keys', '-t', paneId, keys]);
 
       this.emit('keys_sent', { paneId, keys });
     } catch (error) {
@@ -340,7 +316,7 @@ export class TmuxManager extends EventEmitter {
 
   async handleUserInput(input: string, paneId?: string): Promise<void> {
     const targetPaneId = paneId || this.getActivePaneId();
-    
+
     if (!targetPaneId) {
       throw new RenkeiError(
         'No active pane found for input handling',
@@ -366,7 +342,7 @@ export class TmuxManager extends EventEmitter {
   private async executeCommand(args: string[]): Promise<string> {
     return new Promise((resolve, reject) => {
       const child = spawn('tmux', args, {
-        stdio: ['pipe', 'pipe', 'pipe']
+        stdio: ['pipe', 'pipe', 'pipe'],
       });
 
       let stdout = '';
@@ -388,7 +364,9 @@ export class TmuxManager extends EventEmitter {
         if (code === 0) {
           resolve(stdout);
         } else {
-          reject(new Error(`tmux command failed: ${stderr || 'Unknown error'}`));
+          reject(
+            new Error(`tmux command failed: ${stderr || 'Unknown error'}`)
+          );
         }
       });
 
@@ -404,12 +382,12 @@ export class TmuxManager extends EventEmitter {
       '-t',
       sessionName,
       '-F',
-      '#{pane_id}'
+      '#{pane_id}',
     ]);
 
     const panes = result.trim().split('\n');
     const firstPane = panes[0];
-    
+
     if (!firstPane) {
       throw new RenkeiError(
         'No panes found in session',
@@ -424,13 +402,7 @@ export class TmuxManager extends EventEmitter {
   }
 
   private async setPaneTitle(paneId: string, title: string): Promise<void> {
-    await this.executeCommand([
-      'select-pane',
-      '-t',
-      paneId,
-      '-T',
-      title
-    ]);
+    await this.executeCommand(['select-pane', '-t', paneId, '-T', title]);
   }
 
   private updatePaneState(paneId: string, content: string): void {
@@ -438,13 +410,13 @@ export class TmuxManager extends EventEmitter {
       content: [],
       scrollPosition: 0,
       isActive: false,
-      lastUpdate: new Date()
+      lastUpdate: new Date(),
     };
 
     const updatedState: PaneState = {
       ...currentState,
       content: content.split('\n'),
-      lastUpdate: new Date()
+      lastUpdate: new Date(),
     };
 
     this.paneStates.set(paneId, updatedState);
@@ -496,7 +468,7 @@ export class TmuxManager extends EventEmitter {
    */
   getActiveSessions(): TmuxSession[] {
     return Array.from(this.sessions.values()).filter(
-      session => session.status === 'active'
+      (session) => session.status === 'active'
     );
   }
 
