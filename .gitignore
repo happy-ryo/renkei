@@ -122,7 +122,8 @@ api-keys.json
 
 # tmux session files
 .tmux-*
-tmux-*
+tmux-session*
+tmux.conf.*
 
 # Claude Code specific
 .claude/
