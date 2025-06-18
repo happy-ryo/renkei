@@ -1,6 +1,6 @@
 /**
  * Performance Optimizer - 性能最適化システム
- * 
+ *
  * システムのパフォーマンスを監視し、ボトルネックを特定して
  * 自動的な最適化とレコメンデーションを提供します。
  */
@@ -18,14 +18,14 @@ const execAsync = promisify(exec);
  */
 export interface PerformanceMetrics {
   timestamp: Date;
-  
+
   // CPU使用率
   cpu: {
     usage: number; // %
     cores: number;
     loadAverage: number[];
   };
-  
+
   // メモリ使用量
   memory: {
     total: number; // bytes
@@ -35,21 +35,21 @@ export interface PerformanceMetrics {
     heapUsed: number; // bytes
     heapTotal: number; // bytes
   };
-  
+
   // I/O パフォーマンス
   io: {
     readOps: number;
     writeOps: number;
     responseTime: number; // ms
   };
-  
+
   // ネットワーク
   network: {
     connections: number;
     latency: number; // ms
     throughput: number; // bytes/s
   };
-  
+
   // アプリケーション固有
   application: {
     activeConnections: number;
@@ -96,7 +96,7 @@ export interface PerformanceRecommendation {
 export interface OptimizerConfig {
   // 監視間隔 (ms)
   monitoringInterval: number;
-  
+
   // しきい値設定
   thresholds: {
     cpu: {
@@ -116,14 +116,14 @@ export interface OptimizerConfig {
       critical: number; // %
     };
   };
-  
+
   // 自動最適化設定
   autoOptimization: {
     enabled: boolean;
     allowedOptimizations: string[];
     maxAutomaticChanges: number;
   };
-  
+
   // 履歴保持期間
   historyRetention: {
     detailed: number; // hours
@@ -138,11 +138,11 @@ export class PerformanceOptimizer extends EventEmitter {
   private config: OptimizerConfig;
   private isMonitoring = false;
   private monitoringTimer: NodeJS.Timeout | null = null;
-  
+
   private metricsHistory: PerformanceMetrics[] = [];
   private activeIssues: Map<string, PerformanceIssue> = new Map();
   private recommendations: Map<string, PerformanceRecommendation> = new Map();
-  
+
   // パフォーマンス追跡
   private operationTimings: Map<string, number[]> = new Map();
   private requestCounts: Map<string, number> = new Map();
@@ -150,7 +150,7 @@ export class PerformanceOptimizer extends EventEmitter {
 
   constructor(config: Partial<OptimizerConfig> = {}) {
     super();
-    
+
     this.config = {
       monitoringInterval: 30000, // 30秒間隔
       thresholds: {
@@ -205,7 +205,7 @@ export class PerformanceOptimizer extends EventEmitter {
     }
 
     this.isMonitoring = false;
-    
+
     if (this.monitoringTimer) {
       clearInterval(this.monitoringTimer);
       this.monitoringTimer = null;
@@ -219,8 +219,8 @@ export class PerformanceOptimizer extends EventEmitter {
    */
   async collectMetrics(): Promise<PerformanceMetrics> {
     const timestamp = new Date();
-    
-    const [cpuMetrics, memoryMetrics, ioMetrics, networkMetrics, appMetrics] = 
+
+    const [cpuMetrics, memoryMetrics, ioMetrics, networkMetrics, appMetrics] =
       await Promise.all([
         this.getCpuMetrics(),
         this.getMemoryMetrics(),
@@ -254,21 +254,23 @@ export class PerformanceOptimizer extends EventEmitter {
    */
   private async getCpuMetrics(): Promise<PerformanceMetrics['cpu']> {
     const cores = cpus();
-    const loadAvg = process.platform !== 'win32' ? 
-      await this.getLoadAverage() : [0, 0, 0];
+    const loadAvg =
+      process.platform !== 'win32' ? await this.getLoadAverage() : [0, 0, 0];
 
     // CPU使用率計算（簡易版）
     let totalIdle = 0;
     let totalTick = 0;
 
-    cores.forEach(core => {
+    cores.forEach((core) => {
       const { user, nice, sys, idle, irq } = core.times;
       totalIdle += idle;
       totalTick += user + nice + sys + idle + irq;
     });
 
-    const usage = totalTick > 0 ? 
-      Math.round(((totalTick - totalIdle) / totalTick) * 100) : 0;
+    const usage =
+      totalTick > 0
+        ? Math.round(((totalTick - totalIdle) / totalTick) * 100)
+        : 0;
 
     return {
       usage,
@@ -336,20 +338,22 @@ export class PerformanceOptimizer extends EventEmitter {
     let totalResponseTime = 0;
     let totalRequests = 0;
 
-    for (const [operation, timings] of this.operationTimings) {
-      const recentTimings = timings.filter(t => (now - t) < recentWindow);
+    for (const [_operation, timings] of this.operationTimings) {
+      const recentTimings = timings.filter((t) => now - t < recentWindow);
       totalResponseTime += recentTimings.reduce((sum, t) => sum + t, 0);
       totalRequests += recentTimings.length;
     }
 
-    const averageResponseTime = totalRequests > 0 ? 
-      totalResponseTime / totalRequests : 0;
+    const averageResponseTime =
+      totalRequests > 0 ? totalResponseTime / totalRequests : 0;
 
     // エラー率計算
-    const totalErrors = Array.from(this.errorCounts.values())
-      .reduce((sum, count) => sum + count, 0);
-    const errorRate = totalRequests > 0 ? 
-      (totalErrors / totalRequests) * 100 : 0;
+    const totalErrors = Array.from(this.errorCounts.values()).reduce(
+      (sum, count) => sum + count,
+      0
+    );
+    const errorRate =
+      totalRequests > 0 ? (totalErrors / totalRequests) * 100 : 0;
 
     // スループット計算
     const throughput = totalRequests / (recentWindow / 1000); // requests/second
@@ -371,38 +375,106 @@ export class PerformanceOptimizer extends EventEmitter {
 
     // CPU使用率チェック
     if (metrics.cpu.usage >= this.config.thresholds.cpu.critical) {
-      issues.push(this.createIssue('critical', 'cpu', 'Critical CPU Usage', 
-        `CPU usage is ${metrics.cpu.usage}%`, metrics));
+      issues.push(
+        this.createIssue(
+          'critical',
+          'cpu',
+          'Critical CPU Usage',
+          `CPU usage is ${metrics.cpu.usage}%`,
+          metrics
+        )
+      );
     } else if (metrics.cpu.usage >= this.config.thresholds.cpu.warning) {
-      issues.push(this.createIssue('high', 'cpu', 'High CPU Usage', 
-        `CPU usage is ${metrics.cpu.usage}%`, metrics));
+      issues.push(
+        this.createIssue(
+          'high',
+          'cpu',
+          'High CPU Usage',
+          `CPU usage is ${metrics.cpu.usage}%`,
+          metrics
+        )
+      );
     }
 
     // メモリ使用率チェック
     if (metrics.memory.usagePercent >= this.config.thresholds.memory.critical) {
-      issues.push(this.createIssue('critical', 'memory', 'Critical Memory Usage', 
-        `Memory usage is ${metrics.memory.usagePercent}%`, metrics));
-    } else if (metrics.memory.usagePercent >= this.config.thresholds.memory.warning) {
-      issues.push(this.createIssue('high', 'memory', 'High Memory Usage', 
-        `Memory usage is ${metrics.memory.usagePercent}%`, metrics));
+      issues.push(
+        this.createIssue(
+          'critical',
+          'memory',
+          'Critical Memory Usage',
+          `Memory usage is ${metrics.memory.usagePercent}%`,
+          metrics
+        )
+      );
+    } else if (
+      metrics.memory.usagePercent >= this.config.thresholds.memory.warning
+    ) {
+      issues.push(
+        this.createIssue(
+          'high',
+          'memory',
+          'High Memory Usage',
+          `Memory usage is ${metrics.memory.usagePercent}%`,
+          metrics
+        )
+      );
     }
 
     // 応答時間チェック
-    if (metrics.application.averageResponseTime >= this.config.thresholds.responseTime.critical) {
-      issues.push(this.createIssue('critical', 'application', 'Slow Response Time', 
-        `Average response time is ${metrics.application.averageResponseTime}ms`, metrics));
-    } else if (metrics.application.averageResponseTime >= this.config.thresholds.responseTime.warning) {
-      issues.push(this.createIssue('high', 'application', 'Degraded Response Time', 
-        `Average response time is ${metrics.application.averageResponseTime}ms`, metrics));
+    if (
+      metrics.application.averageResponseTime >=
+      this.config.thresholds.responseTime.critical
+    ) {
+      issues.push(
+        this.createIssue(
+          'critical',
+          'application',
+          'Slow Response Time',
+          `Average response time is ${metrics.application.averageResponseTime}ms`,
+          metrics
+        )
+      );
+    } else if (
+      metrics.application.averageResponseTime >=
+      this.config.thresholds.responseTime.warning
+    ) {
+      issues.push(
+        this.createIssue(
+          'high',
+          'application',
+          'Degraded Response Time',
+          `Average response time is ${metrics.application.averageResponseTime}ms`,
+          metrics
+        )
+      );
     }
 
     // エラー率チェック
-    if (metrics.application.errorRate >= this.config.thresholds.errorRate.critical) {
-      issues.push(this.createIssue('critical', 'application', 'High Error Rate', 
-        `Error rate is ${metrics.application.errorRate}%`, metrics));
-    } else if (metrics.application.errorRate >= this.config.thresholds.errorRate.warning) {
-      issues.push(this.createIssue('high', 'application', 'Elevated Error Rate', 
-        `Error rate is ${metrics.application.errorRate}%`, metrics));
+    if (
+      metrics.application.errorRate >= this.config.thresholds.errorRate.critical
+    ) {
+      issues.push(
+        this.createIssue(
+          'critical',
+          'application',
+          'High Error Rate',
+          `Error rate is ${metrics.application.errorRate}%`,
+          metrics
+        )
+      );
+    } else if (
+      metrics.application.errorRate >= this.config.thresholds.errorRate.warning
+    ) {
+      issues.push(
+        this.createIssue(
+          'high',
+          'application',
+          'Elevated Error Rate',
+          `Error rate is ${metrics.application.errorRate}%`,
+          metrics
+        )
+      );
     }
 
     // 新しい問題を処理
@@ -446,7 +518,9 @@ export class PerformanceOptimizer extends EventEmitter {
   /**
    * 改善提案を生成
    */
-  private async generateRecommendations(issue: PerformanceIssue): Promise<void> {
+  private async generateRecommendations(
+    issue: PerformanceIssue
+  ): Promise<void> {
     const recommendations: PerformanceRecommendation[] = [];
 
     switch (issue.category) {
@@ -457,7 +531,8 @@ export class PerformanceOptimizer extends EventEmitter {
           priority: 'high',
           title: 'Optimize CPU Usage',
           description: 'Reduce CPU-intensive operations and implement caching',
-          implementation: 'Enable response caching and optimize database queries',
+          implementation:
+            'Enable response caching and optimize database queries',
           expectedImprovement: 'Reduce CPU usage by 20-30%',
           estimatedEffort: 'medium',
           automated: false,
@@ -470,7 +545,8 @@ export class PerformanceOptimizer extends EventEmitter {
           type: 'immediate',
           priority: 'critical',
           title: 'Memory Cleanup',
-          description: 'Free up memory by cleaning unused objects and optimizing data structures',
+          description:
+            'Free up memory by cleaning unused objects and optimizing data structures',
           implementation: 'Run garbage collection and clear caches',
           expectedImprovement: 'Free up 15-25% memory',
           estimatedEffort: 'small',
@@ -486,7 +562,8 @@ export class PerformanceOptimizer extends EventEmitter {
             priority: 'high',
             title: 'Optimize Response Time',
             description: 'Implement connection pooling and query optimization',
-            implementation: 'Configure connection pools and add database indexes',
+            implementation:
+              'Configure connection pools and add database indexes',
             expectedImprovement: 'Reduce response time by 40-60%',
             estimatedEffort: 'medium',
             automated: false,
@@ -496,7 +573,7 @@ export class PerformanceOptimizer extends EventEmitter {
     }
 
     issue.recommendations = recommendations;
-    
+
     for (const rec of recommendations) {
       this.recommendations.set(rec.id, rec);
       this.emit('recommendation_generated', rec);
@@ -507,10 +584,14 @@ export class PerformanceOptimizer extends EventEmitter {
    * 自動最適化の試行
    */
   private async tryAutoOptimization(issue: PerformanceIssue): Promise<void> {
-    const automatedRecommendations = issue.recommendations.filter(r => r.automated);
+    const automatedRecommendations = issue.recommendations.filter(
+      (r) => r.automated
+    );
 
     for (const rec of automatedRecommendations) {
-      if (this.config.autoOptimization.allowedOptimizations.includes(rec.type)) {
+      if (
+        this.config.autoOptimization.allowedOptimizations.includes(rec.type)
+      ) {
         try {
           await this.executeOptimization(rec);
           this.emit('auto_optimization_applied', rec);
@@ -524,7 +605,9 @@ export class PerformanceOptimizer extends EventEmitter {
   /**
    * 最適化を実行
    */
-  private async executeOptimization(recommendation: PerformanceRecommendation): Promise<void> {
+  private async executeOptimization(
+    recommendation: PerformanceRecommendation
+  ): Promise<void> {
     switch (recommendation.type) {
       case 'immediate':
         if (recommendation.title.includes('Memory Cleanup')) {
@@ -532,7 +615,7 @@ export class PerformanceOptimizer extends EventEmitter {
           if (global.gc) {
             global.gc();
           }
-          
+
           // キャッシュクリア
           this.clearOperationHistory();
         }
@@ -582,13 +665,14 @@ export class PerformanceOptimizer extends EventEmitter {
     issues: PerformanceIssue[];
     recommendations: PerformanceRecommendation[];
   } {
-    const latestMetrics = this.metricsHistory[this.metricsHistory.length - 1] || null;
+    const latestMetrics =
+      this.metricsHistory[this.metricsHistory.length - 1] || null;
     const trends = this.analyzeTrends();
-    
+
     return {
       summary: latestMetrics,
       trends,
-      issues: Array.from(this.activeIssues.values()).filter(i => !i.resolved),
+      issues: Array.from(this.activeIssues.values()).filter((i) => !i.resolved),
       recommendations: Array.from(this.recommendations.values()),
     };
   }
@@ -602,14 +686,27 @@ export class PerformanceOptimizer extends EventEmitter {
     }
 
     const recent = this.metricsHistory.slice(-10);
-    const cpuTrend = this.calculateTrend(recent.map(m => m.cpu.usage));
-    const memoryTrend = this.calculateTrend(recent.map(m => m.memory.usagePercent));
-    const responseTrend = this.calculateTrend(recent.map(m => m.application.averageResponseTime));
+    const cpuTrend = this.calculateTrend(recent.map((m) => m.cpu.usage));
+    const memoryTrend = this.calculateTrend(
+      recent.map((m) => m.memory.usagePercent)
+    );
+    const responseTrend = this.calculateTrend(
+      recent.map((m) => m.application.averageResponseTime)
+    );
 
     return {
-      cpu: { trend: cpuTrend, direction: cpuTrend > 0 ? 'increasing' : 'decreasing' },
-      memory: { trend: memoryTrend, direction: memoryTrend > 0 ? 'increasing' : 'decreasing' },
-      responseTime: { trend: responseTrend, direction: responseTrend > 0 ? 'increasing' : 'decreasing' },
+      cpu: {
+        trend: cpuTrend,
+        direction: cpuTrend > 0 ? 'increasing' : 'decreasing',
+      },
+      memory: {
+        trend: memoryTrend,
+        direction: memoryTrend > 0 ? 'increasing' : 'decreasing',
+      },
+      responseTime: {
+        trend: responseTrend,
+        direction: responseTrend > 0 ? 'increasing' : 'decreasing',
+      },
     };
   }
 
@@ -622,7 +719,7 @@ export class PerformanceOptimizer extends EventEmitter {
     const n = values.length;
     const sumX = (n * (n - 1)) / 2;
     const sumY = values.reduce((sum, val) => sum + val, 0);
-    const sumXY = values.reduce((sum, val, i) => sum + (i * val), 0);
+    const sumXY = values.reduce((sum, val, i) => sum + i * val, 0);
     const sumX2 = (n * (n - 1) * (2 * n - 1)) / 6;
 
     return (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
@@ -636,7 +733,11 @@ export class PerformanceOptimizer extends EventEmitter {
       const { stdout } = await execAsync('uptime');
       const match = stdout.match(/load average: ([\d.]+), ([\d.]+), ([\d.]+)/);
       if (match && match[1] && match[2] && match[3]) {
-        return [parseFloat(match[1]), parseFloat(match[2]), parseFloat(match[3])];
+        return [
+          parseFloat(match[1]),
+          parseFloat(match[2]),
+          parseFloat(match[3]),
+        ];
       }
     } catch (error) {
       // Windows等でuptimeが使えない場合
@@ -648,7 +749,7 @@ export class PerformanceOptimizer extends EventEmitter {
     const start = performance.now();
     // 簡易的なレイテンシ測定（ローカルでのファイルアクセス時間）
     try {
-      await import('fs').then(fs => fs.promises.access('.'));
+      await import('fs').then((fs) => fs.promises.access('.'));
       return performance.now() - start;
     } catch {
       return 0;
@@ -656,22 +757,27 @@ export class PerformanceOptimizer extends EventEmitter {
   }
 
   private clearOperationHistory(): void {
-    const cutoff = Date.now() - (60 * 60 * 1000); // 1時間前
-    
-    for (const [operation, timings] of this.operationTimings) {
-      const filtered = timings.filter(t => t > cutoff);
-      this.operationTimings.set(operation, filtered);
+    const cutoff = Date.now() - 60 * 60 * 1000; // 1時間前
+
+    for (const [_operation, timings] of this.operationTimings) {
+      const filtered = timings.filter((t) => t > cutoff);
+      if (filtered.length !== timings.length) {
+        this.operationTimings.set(_operation, filtered);
+      }
     }
   }
 
   private cleanupHistory(): void {
     const maxDetailedEntries = Math.floor(
-      (this.config.historyRetention.detailed * 60 * 60 * 1000) / 
-      this.config.monitoringInterval
+      (this.config.historyRetention.detailed * 60 * 60 * 1000) /
+        this.config.monitoringInterval
     );
 
     if (this.metricsHistory.length > maxDetailedEntries) {
-      this.metricsHistory.splice(0, this.metricsHistory.length - maxDetailedEntries);
+      this.metricsHistory.splice(
+        0,
+        this.metricsHistory.length - maxDetailedEntries
+      );
     }
   }
 
@@ -719,8 +825,15 @@ export class PerformanceOptimizer extends EventEmitter {
 /**
  * パフォーマンス測定デコレータ
  */
-export function measurePerformance(optimizer: PerformanceOptimizer, operation: string) {
-  return function (target: any, propertyName: string, descriptor: PropertyDescriptor) {
+export function measurePerformance(
+  optimizer: PerformanceOptimizer,
+  operation: string
+) {
+  return function (
+    _target: any,
+    _propertyName: string,
+    descriptor: PropertyDescriptor
+  ) {
     const method = descriptor.value;
 
     descriptor.value = async function (...args: any[]) {
@@ -767,6 +880,8 @@ export const defaultOptimizerConfig: OptimizerConfig = {
 /**
  * ファクトリ関数
  */
-export function createPerformanceOptimizer(config?: Partial<OptimizerConfig>): PerformanceOptimizer {
+export function createPerformanceOptimizer(
+  config?: Partial<OptimizerConfig>
+): PerformanceOptimizer {
   return new PerformanceOptimizer({ ...defaultOptimizerConfig, ...config });
 }
