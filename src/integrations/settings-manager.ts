@@ -355,45 +355,50 @@ export class SettingsManager extends EventEmitter {
   }
 
   /**
-   * 設定ファイルの検証
+   * 設定ファイルの検証と自動修復
    */
   async validateSettingsFile(): Promise<void> {
-    const settings = await this.loadSettingsFile();
+    try {
+      const settings = await this.loadSettingsFile();
+      let needsUpdate = false;
 
-    // 必須フィールドの確認
-    if (
-      !settings.permissions ||
-      !settings.permissions.allow ||
-      !settings.permissions.deny
-    ) {
-      throw new ClaudeCodeError(
-        ClaudeErrorCode.INVALID_REQUEST,
-        '設定ファイルの permissions フィールドが不正です'
-      );
+      // 必須フィールドの確認と自動修復
+      if (
+        !settings.permissions ||
+        !settings.permissions.allow ||
+        !settings.permissions.deny
+      ) {
+        console.warn('設定ファイルのpermissionsフィールドが不正です。デフォルト値で修復します。');
+        needsUpdate = true;
+      }
+
+      if (!settings.workspaceRestrictions) {
+        console.warn('設定ファイルのworkspaceRestrictionsフィールドが不正です。デフォルト値で修復します。');
+        needsUpdate = true;
+      }
+
+      if (!settings.executionLimits) {
+        console.warn('設定ファイルのexecutionLimitsフィールドが不正です。デフォルト値で修復します。');
+        needsUpdate = true;
+      }
+
+      if (!settings.security) {
+        console.warn('設定ファイルのsecurityフィールドが不正です。デフォルト値で修復します。');
+        needsUpdate = true;
+      }
+
+      // 不正なフィールドがある場合は設定ファイルを再生成
+      if (needsUpdate) {
+        console.log('設定ファイルを最新の形式に更新しています...');
+        await this.generateDefaultSettings();
+      }
+
+      this.emit('settings_validated', { settings });
+    } catch (error) {
+      // 設定ファイルの読み込みや検証に完全に失敗した場合は再生成
+      console.warn('設定ファイルの検証に失敗しました。デフォルト設定で再生成します。');
+      await this.generateDefaultSettings();
     }
-
-    if (!settings.workspaceRestrictions) {
-      throw new ClaudeCodeError(
-        ClaudeErrorCode.INVALID_REQUEST,
-        '設定ファイルの workspaceRestrictions フィールドが不正です'
-      );
-    }
-
-    if (!settings.executionLimits) {
-      throw new ClaudeCodeError(
-        ClaudeErrorCode.INVALID_REQUEST,
-        '設定ファイルの executionLimits フィールドが不正です'
-      );
-    }
-
-    if (!settings.security) {
-      throw new ClaudeCodeError(
-        ClaudeErrorCode.INVALID_REQUEST,
-        '設定ファイルの security フィールドが不正です'
-      );
-    }
-
-    this.emit('settings_validated', { settings });
   }
 
   /**
