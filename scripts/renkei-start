@@ -133,10 +133,19 @@ function createTmuxSession(config) {
     logInfo('Attaching to existing session...');
     
     try {
-      execSync(`tmux attach-session -t ${sessionName}`, { stdio: 'inherit' });
-      return;
+      // 既存セッションのペイン情報を取得
+      const panes = execSync(`tmux list-panes -t ${sessionName} -F "#{pane_id}"`, { encoding: 'utf8' })
+        .trim()
+        .split('\n');
+      
+      return {
+        sessionName,
+        mainPaneId: panes[0] || `${sessionName}:0.0`,
+        subPaneId: panes[1] || null,
+        isExisting: true
+      };
     } catch (error) {
-      logError(`Failed to attach to existing session: ${error.message}`);
+      logError(`Failed to get existing session info: ${error.message}`);
       throw error;
     }
   }
@@ -162,20 +171,40 @@ function createTmuxSession(config) {
     // メインペインのタイトル設定
     execSync(`tmux select-pane -t ${sessionName}:0.0 -T "${config.tmux.mainPaneTitle}"`, { stdio: 'pipe' });
     
-    // 垂直分割でサブペイン作成
-    if (config.tmux.splitDirection === 'vertical') {
-      execSync(`tmux split-window -t ${sessionName} -v -p 20`, { stdio: 'pipe' });
-    } else {
-      execSync(`tmux split-window -t ${sessionName} -h -p 30`, { stdio: 'pipe' });
+    // 垂直分割でサブペイン作成（ペインIDを取得）
+    let subPaneId;
+    try {
+      if (config.tmux.splitDirection === 'vertical') {
+        // 垂直分割の場合は10行の固定サイズ
+        subPaneId = execSync(`tmux split-window -t ${sessionName}:0 -v -l 10 -P -F "#{pane_id}"`, { encoding: 'utf8' }).trim();
+      } else {
+        // 水平分割の場合は40列の固定サイズ
+        subPaneId = execSync(`tmux split-window -t ${sessionName}:0 -h -l 40 -P -F "#{pane_id}"`, { encoding: 'utf8' }).trim();
+      }
+    } catch (splitError) {
+      logError(`Failed to create sub-pane: ${splitError.message}`);
+      throw splitError;
     }
     
-    // サブペインのタイトル設定
-    execSync(`tmux select-pane -t ${sessionName}:0.1 -T "${config.tmux.subPaneTitle}"`, { stdio: 'pipe' });
+    logInfo(`Created sub-pane with ID: ${subPaneId}`);
+    
+    // サブペインのタイトル設定（ペインIDを使用）
+    execSync(`tmux select-pane -t ${subPaneId} -T "${config.tmux.subPaneTitle}"`, { stdio: 'pipe' });
     
     // メインペインにフォーカス
     execSync(`tmux select-pane -t ${sessionName}:0.0`, { stdio: 'pipe' });
     
     logSuccess('tmux session layout configured');
+    
+    // メインペインIDを取得
+    const mainPaneId = execSync(`tmux list-panes -t ${sessionName} -F "#{pane_id}" | head -n 1`, { encoding: 'utf8' }).trim();
+    
+    return {
+      sessionName,
+      mainPaneId,
+      subPaneId,
+      isExisting: false
+    };
     
   } catch (error) {
     logError(`Failed to create tmux session: ${error.message}`);
@@ -206,19 +235,23 @@ function buildTypeScript() {
 }
 
 // システム起動
-function startSystem(config) {
+function startSystem(config, sessionInfo) {
   try {
     logInfo('Starting Renkei System...');
     
-    const sessionName = config.tmux.sessionName;
+    const { mainPaneId, subPaneId } = sessionInfo;
     
     // メインペインでシステム起動
     const startCommand = `node dist/index.js`;
-    execSync(`tmux send-keys -t ${sessionName}:0.0 "${startCommand}" Enter`, { stdio: 'pipe' });
+    execSync(`tmux send-keys -t ${mainPaneId} "${startCommand}" Enter`, { stdio: 'pipe' });
     
-    // サブペインで監視表示
-    const monitorCommand = `echo "Renkei System Output Monitor" && echo "System started at $(date)"`;
-    execSync(`tmux send-keys -t ${sessionName}:0.1 "${monitorCommand}" Enter`, { stdio: 'pipe' });
+    // サブペインで監視表示（サブペインが存在する場合）
+    if (subPaneId) {
+      const monitorCommand = `echo "Renkei System Output Monitor" && echo "System started at $(date)"`;
+      execSync(`tmux send-keys -t ${subPaneId} "${monitorCommand}" Enter`, { stdio: 'pipe' });
+    } else {
+      logWarning('Sub-pane not found. Monitor display skipped.');
+    }
     
     logSuccess('System startup commands sent to tmux session');
     
@@ -229,9 +262,9 @@ function startSystem(config) {
 }
 
 // 初期画面表示とログ監視開始
-function displayWelcomeScreen(config) {
+function displayWelcomeScreen(config, sessionInfo) {
   try {
-    const sessionName = config.tmux.sessionName;
+    const { sessionName, subPaneId } = sessionInfo;
     
     // ログファイルの存在確認・作成
     const logDir = path.join(process.cwd(), 'data', 'logs');
@@ -250,6 +283,12 @@ function displayWelcomeScreen(config) {
       logInfo('Created worker log file');
     }
     
+    // サブペインが存在する場合のみ処理
+    if (!subPaneId) {
+      logWarning('Sub-pane not found. Welcome screen display skipped.');
+      return;
+    }
+    
     // 初期ヘッダーメッセージをサブペインに送信
     const headerMessages = [
       '',
@@ -260,12 +299,12 @@ function displayWelcomeScreen(config) {
     ];
     
     headerMessages.forEach(message => {
-      execSync(`tmux send-keys -t ${sessionName}:0.1 "echo '${message}'" Enter`, { stdio: 'pipe' });
+      execSync(`tmux send-keys -t ${subPaneId} "echo '${message}'" Enter`, { stdio: 'pipe' });
     });
     
     // ログ監視コマンドを開始 - より簡単で確実な方法
     const logMonitorCommand = `tail -f "${logFile}" || echo "Waiting for worker logs..."`;
-    execSync(`tmux send-keys -t ${sessionName}:0.1 "${logMonitorCommand}" Enter`, { stdio: 'pipe' });
+    execSync(`tmux send-keys -t ${subPaneId} "${logMonitorCommand}" Enter`, { stdio: 'pipe' });
     
     logSuccess('Worker status monitor started');
     logInfo(`Monitoring log file: ${logFile}`);
@@ -274,8 +313,9 @@ function displayWelcomeScreen(config) {
     logWarning(`Failed to start worker monitor: ${error.message}`);
     // フォールバック: 静的メッセージ表示
     try {
-      const sessionName = config.tmux.sessionName;
-      execSync(`tmux send-keys -t ${sessionName}:0.1 "echo 'Worker status monitor unavailable. Check logs manually.'" Enter`, { stdio: 'pipe' });
+      if (sessionInfo.subPaneId) {
+        execSync(`tmux send-keys -t ${sessionInfo.subPaneId} "echo 'Worker status monitor unavailable. Check logs manually.'" Enter`, { stdio: 'pipe' });
+      }
     } catch (fallbackError) {
       logError(`Fallback display also failed: ${fallbackError.message}`);
     }
@@ -794,15 +834,15 @@ async function main(options = {}) {
     
     // 6. tmuxセッション作成
     logHeader('Setting up tmux Session');
-    createTmuxSession(config);
+    const sessionInfo = createTmuxSession(config);
     
     // 7. システム起動
     logHeader('Starting System');
-    startSystem(config);
+    startSystem(config, sessionInfo);
     
     // 8. 初期画面表示
     logHeader('Displaying Welcome Screen');
-    displayWelcomeScreen(config);
+    displayWelcomeScreen(config, sessionInfo);
     
     // 9. セッション状態保存
     saveSessionState(config);
@@ -831,15 +871,28 @@ async function main(options = {}) {
     // tmuxセッションにアタッチ（--no-attachオプションでない場合）
     if (!options.noAttach) {
       logInfo('Attaching to tmux session...');
-      setTimeout(() => {
+      
+      // 既存セッションの場合はすぐにアタッチ
+      if (sessionInfo && sessionInfo.isExisting) {
         try {
-          execSync(`tmux attach-session -t ${config.tmux.sessionName}`, { stdio: 'inherit' });
+          execSync(`tmux attach-session -t ${sessionInfo.sessionName}`, { stdio: 'inherit' });
         } catch (error) {
           logWarning(`Failed to attach to session: ${error.message}`);
           logInfo('You can manually attach with:');
-          logInfo(`  tmux attach-session -t ${config.tmux.sessionName}`);
+          logInfo(`  tmux attach-session -t ${sessionInfo.sessionName}`);
         }
-      }, 1000);
+      } else {
+        // 新規セッションの場合は少し待機
+        setTimeout(() => {
+          try {
+            execSync(`tmux attach-session -t ${config.tmux.sessionName}`, { stdio: 'inherit' });
+          } catch (error) {
+            logWarning(`Failed to attach to session: ${error.message}`);
+            logInfo('You can manually attach with:');
+            logInfo(`  tmux attach-session -t ${config.tmux.sessionName}`);
+          }
+        }, 1000);
+      }
     } else {
       logInfo('Skipping tmux attach (--no-attach specified)');
     }

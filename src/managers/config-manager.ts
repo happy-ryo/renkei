@@ -393,7 +393,7 @@ export class ConfigManager {
   private async getClaudeCodeVersion(): Promise<string | undefined> {
     try {
       const { execSync } = await import('child_process');
-      const output = execSync('claude-code --version', { encoding: 'utf-8' });
+      const output = execSync('claude --version', { encoding: 'utf-8' });
       return output.trim();
     } catch {
       return undefined;

@@ -47,10 +47,10 @@
   "homepage": "https://github.com/happy-ryo/renkei#readme",
   "dependencies": {
     "@anthropic-ai/claude-code": "^1.0.0",
-    "chalk": "^5.3.0",
+    "chalk": "^4.1.2",
     "commander": "^12.1.0",
-    "inquirer": "^10.2.2",
-    "ora": "^8.1.0",
+    "inquirer": "^8.2.6",
+    "ora": "^5.4.1",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "uuid": "^10.0.0"
