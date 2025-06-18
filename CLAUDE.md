@@ -160,6 +160,23 @@ Before creating any PR, ALWAYS:
 4. Ensure all intended changes are included in commits
 5. Check if formatters/linters modified files during commit
 
+### Post-Merge Workflow
+When the user informs you that a PR has been merged:
+1. **Immediately switch to main branch**: `git checkout main`
+2. **Pull the latest changes**: `git pull origin main`
+3. **Verify the merge**: Check that all expected changes are present
+4. **Clean up**: Delete the local feature branch if no longer needed
+
+Example:
+```bash
+# After user says "マージしました" or "merged"
+git checkout main
+git pull origin main
+git branch -d feature-branch-name  # Optional: clean up local branch
+```
+
+This ensures you're always working with the latest code and prevents conflicts.
+
 ## Common Development Tasks
 
 ### Adding a New Manager
