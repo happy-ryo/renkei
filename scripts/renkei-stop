@@ -1,0 +1,536 @@
+#!/usr/bin/env node
+
+/**
+ * Renkei System - Stop Script
+ * セッション保存・プロセス終了・クリーンアップ
+ */
+
+const { execSync, spawn } = require('child_process');
+const fs = require('fs');
+const path = require('path');
+const os = require('os');
+
+// カラー出力用の定数
+const colors = {
+  red: '\x1b[31m',
+  green: '\x1b[32m',
+  yellow: '\x1b[33m',
+  blue: '\x1b[34m',
+  magenta: '\x1b[35m',
+  cyan: '\x1b[36m',
+  white: '\x1b[37m',
+  reset: '\x1b[0m',
+  bold: '\x1b[1m'
+};
+
+// ログ出力関数
+function log(message, color = colors.white) {
+  console.log(`${color}${message}${colors.reset}`);
+}
+
+function logSuccess(message) {
+  log(`✅ ${message}`, colors.green);
+}
+
+function logError(message) {
+  log(`❌ ${message}`, colors.red);
+}
+
+function logWarning(message) {
+  log(`⚠️  ${message}`, colors.yellow);
+}
+
+function logInfo(message) {
+  log(`ℹ️  ${message}`, colors.blue);
+}
+
+function logHeader(message) {
+  log(`\n${colors.bold}🛑 ${message}${colors.reset}`, colors.cyan);
+}
+
+// 設定ファイル読み込み
+function loadConfig() {
+  const userSettingsPath = path.join(process.cwd(), 'data/user-settings.json');
+  const defaultSettingsPath = path.join(process.cwd(), 'config/default-settings.json');
+  
+  let config;
+  
+  try {
+    if (fs.existsSync(userSettingsPath)) {
+      config = JSON.parse(fs.readFileSync(userSettingsPath, 'utf8'));
+    } else if (fs.existsSync(defaultSettingsPath)) {
+      config = JSON.parse(fs.readFileSync(defaultSettingsPath, 'utf8'));
+    } else {
+      // デフォルト設定で最低限の停止処理を実行
+      config = {
+        tmux: { sessionName: 'renkei-session' },
+        sessionDir: path.join(process.cwd(), 'data/sessions')
+      };
+      logWarning('Configuration file not found. Using default settings for shutdown.');
+    }
+    
+    return config;
+  } catch (error) {
+    logError(`Failed to load configuration: ${error.message}`);
+    // 設定ファイルが読めなくてもシャットダウンは実行
+    return {
+      tmux: { sessionName: 'renkei-session' },
+      sessionDir: path.join(process.cwd(), 'data/sessions')
+    };
+  }
+}
+
+// tmuxセッション存在チェック
+function checkTmuxSession(sessionName) {
+  try {
+    execSync(`tmux has-session -t ${sessionName}`, { stdio: 'pipe' });
+    return true;
+  } catch (error) {
+    return false;
+  }
+}
+
+// 実行中プロセス検索
+function findRenkeiProcesses() {
+  try {
+    const processes = [];
+    
+    // Node.jsプロセスを検索
+    try {
+      const psOutput = execSync('ps aux', { encoding: 'utf8', stdio: 'pipe' });
+      const lines = psOutput.split('\n');
+      
+      for (const line of lines) {
+        if (line.includes('node') && (line.includes('dist/index.js') || line.includes('renkei'))) {
+          const parts = line.trim().split(/\s+/);
+          if (parts.length >= 2) {
+            const pid = parseInt(parts[1]);
+            if (!isNaN(pid)) {
+              processes.push({ pid, command: parts.slice(10).join(' ') });
+            }
+          }
+        }
+      }
+    } catch (error) {
+      logWarning('Failed to search for Node.js processes');
+    }
+    
+    return processes;
+  } catch (error) {
+    logWarning(`Failed to find Renkei processes: ${error.message}`);
+    return [];
+  }
+}
+
+// セッション状態保存
+function saveSessionState(config, sessionData = {}) {
+  try {
+    logInfo('Saving session state...');
+    
+    const sessionDir = config.sessionDir || path.join(process.cwd(), 'data/sessions');
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const sessionStateFile = path.join(sessionDir, `shutdown-${timestamp}.json`);
+    
+    // tmuxセッション情報取得
+    let tmuxInfo = null;
+    if (checkTmuxSession(config.tmux.sessionName)) {
+      try {
+        const sessionInfo = execSync(`tmux display-message -t ${config.tmux.sessionName} -p "#{session_name},#{session_created},#{session_windows}"`, { encoding: 'utf8', stdio: 'pipe' });
+        const [name, created, windows] = sessionInfo.trim().split(',');
+        tmuxInfo = { name, created, windows: parseInt(windows) };
+      } catch (error) {
+        logWarning('Failed to get tmux session info');
+      }
+    }
+    
+    const sessionState = {
+      timestamp: new Date().toISOString(),
+      shutdownReason: sessionData.reason || 'manual',
+      sessionName: config.tmux.sessionName,
+      tmuxInfo,
+      workspaceDir: config.workspaceDir,
+      platform: os.platform(),
+      nodeVersion: process.version,
+      uptime: process.uptime(),
+      memoryUsage: process.memoryUsage(),
+      ...sessionData
+    };
+    
+    // ディレクトリ確認・作成
+    if (!fs.existsSync(sessionDir)) {
+      fs.mkdirSync(sessionDir, { recursive: true });
+    }
+    
+    fs.writeFileSync(sessionStateFile, JSON.stringify(sessionState, null, 2));
+    logSuccess(`Session state saved: ${sessionStateFile}`);
+    
+    return sessionStateFile;
+  } catch (error) {
+    logWarning(`Failed to save session state: ${error.message}`);
+    return null;
+  }
+}
+
+// プロセス終了
+function terminateProcesses(config, force = false) {
+  try {
+    logInfo('Terminating Renkei processes...');
+    
+    const processes = findRenkeiProcesses();
+    
+    if (processes.length === 0) {
+      logInfo('No Renkei processes found');
+      return;
+    }
+    
+    logInfo(`Found ${processes.length} Renkei process(es)`);
+    
+    for (const process of processes) {
+      try {
+        logInfo(`Terminating process ${process.pid}: ${process.command}`);
+        
+        if (force) {
+          execSync(`kill -KILL ${process.pid}`, { stdio: 'pipe' });
+          logSuccess(`Force killed process ${process.pid}`);
+        } else {
+          execSync(`kill -TERM ${process.pid}`, { stdio: 'pipe' });
+          logSuccess(`Gracefully terminated process ${process.pid}`);
+        }
+      } catch (error) {
+        logWarning(`Failed to terminate process ${process.pid}: ${error.message}`);
+      }
+    }
+    
+    // プロセス終了待機
+    if (!force) {
+      logInfo('Waiting for processes to exit gracefully...');
+      setTimeout(() => {
+        const remainingProcesses = findRenkeiProcesses();
+        if (remainingProcesses.length > 0) {
+          logWarning(`${remainingProcesses.length} process(es) still running. Use --force to kill them.`);
+        }
+      }, 2000);
+    }
+    
+  } catch (error) {
+    logError(`Failed to terminate processes: ${error.message}`);
+  }
+}
+
+// tmuxセッション削除
+function deleteTmuxSession(config, backup = true) {
+  try {
+    const sessionName = config.tmux.sessionName;
+    
+    if (!checkTmuxSession(sessionName)) {
+      logInfo(`tmux session '${sessionName}' does not exist`);
+      return;
+    }
+    
+    logInfo(`Deleting tmux session: ${sessionName}`);
+    
+    // セッション情報をバックアップ
+    if (backup) {
+      try {
+        const sessionInfo = execSync(`tmux list-sessions -F "#{session_name}: #{session_windows} windows, created #{session_created_string}"`, { encoding: 'utf8', stdio: 'pipe' });
+        logInfo(`Session info: ${sessionInfo.trim()}`);
+      } catch (error) {
+        logWarning('Failed to get session info for backup');
+      }
+    }
+    
+    // セッション削除
+    execSync(`tmux kill-session -t ${sessionName}`, { stdio: 'pipe' });
+    logSuccess(`tmux session '${sessionName}' deleted`);
+    
+  } catch (error) {
+    logError(`Failed to delete tmux session: ${error.message}`);
+  }
+}
+
+// ログファイルのローテーション
+function rotateLogFiles(config) {
+  try {
+    const logDir = path.join(process.cwd(), 'data/logs');
+    
+    if (!fs.existsSync(logDir)) {
+      return;
+    }
+    
+    logInfo('Rotating log files...');
+    
+    const logFiles = fs.readdirSync(logDir).filter(file => file.endsWith('.log'));
+    const maxLogFiles = 10; // 最大保持ログファイル数
+    
+    if (logFiles.length > maxLogFiles) {
+      // 古いログファイルを削除
+      const sortedFiles = logFiles
+        .map(file => ({
+          name: file,
+          path: path.join(logDir, file),
+          mtime: fs.statSync(path.join(logDir, file)).mtime
+        }))
+        .sort((a, b) => a.mtime - b.mtime);
+      
+      const filesToDelete = sortedFiles.slice(0, sortedFiles.length - maxLogFiles);
+      
+      for (const file of filesToDelete) {
+        fs.unlinkSync(file.path);
+        logInfo(`Deleted old log file: ${file.name}`);
+      }
+    }
+    
+    logSuccess('Log file rotation completed');
+    
+  } catch (error) {
+    logWarning(`Failed to rotate log files: ${error.message}`);
+  }
+}
+
+// 一時ファイルクリーンアップ
+function cleanupTempFiles(config) {
+  try {
+    const tempDir = path.join(config.workspaceDir || process.cwd(), 'temp');
+    
+    if (!fs.existsSync(tempDir)) {
+      return;
+    }
+    
+    logInfo('Cleaning up temporary files...');
+    
+    const tempFiles = fs.readdirSync(tempDir);
+    let deletedCount = 0;
+    
+    for (const file of tempFiles) {
+      if (file === '.gitkeep') {
+        continue; // .gitkeepは保持
+      }
+      
+      try {
+        const filePath = path.join(tempDir, file);
+        const stats = fs.statSync(filePath);
+        
+        if (stats.isFile()) {
+          fs.unlinkSync(filePath);
+          deletedCount++;
+        } else if (stats.isDirectory()) {
+          fs.rmSync(filePath, { recursive: true, force: true });
+          deletedCount++;
+        }
+      } catch (error) {
+        logWarning(`Failed to delete temp file ${file}: ${error.message}`);
+      }
+    }
+    
+    if (deletedCount > 0) {
+      logSuccess(`Cleaned up ${deletedCount} temporary file(s)`);
+    } else {
+      logInfo('No temporary files to clean up');
+    }
+    
+  } catch (error) {
+    logWarning(`Failed to cleanup temp files: ${error.message}`);
+  }
+}
+
+// システム状態チェック
+function checkSystemStatus(config) {
+  logHeader('System Status Check');
+  
+  const status = {
+    tmuxSession: false,
+    renkeiProcesses: 0,
+    configLoaded: false
+  };
+  
+  // tmux セッションチェック
+  if (checkTmuxSession(config.tmux.sessionName)) {
+    status.tmuxSession = true;
+    logInfo(`✅ tmux session '${config.tmux.sessionName}' is running`);
+  } else {
+    logInfo(`❌ tmux session '${config.tmux.sessionName}' not found`);
+  }
+  
+  // プロセスチェック
+  const processes = findRenkeiProcesses();
+  status.renkeiProcesses = processes.length;
+  if (processes.length > 0) {
+    logInfo(`✅ Found ${processes.length} Renkei process(es)`);
+    processes.forEach(proc => {
+      logInfo(`   PID ${proc.pid}: ${proc.command}`);
+    });
+  } else {
+    logInfo(`❌ No Renkei processes found`);
+  }
+  
+  // 設定ファイルチェック
+  const configPath = path.join(process.cwd(), 'data/user-settings.json');
+  if (fs.existsSync(configPath)) {
+    status.configLoaded = true;
+    logInfo(`✅ Configuration file found: ${configPath}`);
+  } else {
+    logInfo(`❌ Configuration file not found: ${configPath}`);
+  }
+  
+  return status;
+}
+
+// メイン関数
+async function main() {
+  logHeader('Renkei System Stop');
+  
+  try {
+    // 1. 設定読み込み
+    logHeader('Loading Configuration');
+    const config = loadConfig();
+    
+    // 2. システム状態チェック
+    const status = checkSystemStatus(config);
+    
+    if (!status.tmuxSession && status.renkeiProcesses === 0) {
+      logInfo('Renkei System is not currently running');
+      logInfo('Performing cleanup operations...');
+    }
+    
+    // 3. セッション状態保存
+    logHeader('Saving Session State');
+    const sessionData = {
+      reason: 'manual_shutdown',
+      systemStatus: status
+    };
+    saveSessionState(config, sessionData);
+    
+    // 4. プロセス終了
+    logHeader('Terminating Processes');
+    const options = parseArguments();
+    terminateProcesses(config, options.force);
+    
+    // 5. tmuxセッション削除
+    logHeader('Cleaning up tmux Session');
+    deleteTmuxSession(config, !options.noBackup);
+    
+    // 6. ログローテーション
+    logHeader('Log Maintenance');
+    rotateLogFiles(config);
+    
+    // 7. 一時ファイルクリーンアップ
+    logHeader('Cleanup Temporary Files');
+    cleanupTempFiles(config);
+    
+    // 8. 停止完了
+    logHeader('Shutdown Complete');
+    logSuccess('Renkei System has been stopped successfully!');
+    logInfo('');
+    logInfo('Session data has been saved to: data/sessions/');
+    logInfo('To restart the system, run: scripts/renkei-start');
+    
+  } catch (error) {
+    logError(`Shutdown failed: ${error.message}`);
+    logInfo('Some cleanup operations may have failed.');
+    logInfo('You may need to manually kill remaining processes or tmux sessions.');
+    process.exit(1);
+  }
+}
+
+// コマンドライン引数処理
+function parseArguments() {
+  const args = process.argv.slice(2);
+  const options = {
+    help: false,
+    force: false,
+    noBackup: false,
+    statusOnly: false
+  };
+  
+  for (const arg of args) {
+    switch (arg) {
+      case '--help':
+      case '-h':
+        options.help = true;
+        break;
+      case '--force':
+      case '-f':
+        options.force = true;
+        break;
+      case '--no-backup':
+        options.noBackup = true;
+        break;
+      case '--status':
+      case '-s':
+        options.statusOnly = true;
+        break;
+      default:
+        logWarning(`Unknown option: ${arg}`);
+    }
+  }
+  
+  return options;
+}
+
+// ヘルプ表示
+function showHelp() {
+  logHeader('Renkei Stop - Help');
+  logInfo('');
+  logInfo('Usage: scripts/renkei-stop [options]');
+  logInfo('');
+  logInfo('Options:');
+  logInfo('  -h, --help        Show this help message');
+  logInfo('  -f, --force       Force kill processes (SIGKILL)');
+  logInfo('  --no-backup       Skip session backup');
+  logInfo('  -s, --status      Show status only (no shutdown)');
+  logInfo('');
+  logInfo('Examples:');
+  logInfo('  scripts/renkei-stop           # Normal shutdown');
+  logInfo('  scripts/renkei-stop --force   # Force shutdown');
+  logInfo('  scripts/renkei-stop --status  # Check status only');
+}
+
+// ステータス表示のみ
+function statusOnly() {
+  logHeader('Renkei System Status');
+  
+  try {
+    const config = loadConfig();
+    const status = checkSystemStatus(config);
+    
+    logInfo('');
+    if (status.tmuxSession || status.renkeiProcesses > 0) {
+      logInfo('🟢 Renkei System is RUNNING');
+    } else {
+      logInfo('🔴 Renkei System is STOPPED');
+    }
+    
+    logInfo('');
+    logInfo('To stop the system, run: scripts/renkei-stop');
+    
+  } catch (error) {
+    logError(`Status check failed: ${error.message}`);
+    process.exit(1);
+  }
+}
+
+// スクリプト実行
+if (require.main === module) {
+  const options = parseArguments();
+  
+  if (options.help) {
+    showHelp();
+    process.exit(0);
+  }
+  
+  if (options.statusOnly) {
+    statusOnly();
+    process.exit(0);
+  }
+  
+  if (options.force) {
+    logWarning('Force shutdown mode enabled');
+  }
+  
+  main().catch(error => {
+    logError(`Unexpected error: ${error.message}`);
+    process.exit(1);
+  });
+}
+
+module.exports = { main, loadConfig, checkSystemStatus };

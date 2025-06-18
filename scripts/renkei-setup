@@ -1,0 +1,319 @@
+#!/usr/bin/env node
+
+/**
+ * Renkei System - Setup Script
+ * 環境チェック・依存関係インストール・初期設定
+ */
+
+const { execSync, spawn } = require('child_process');
+const fs = require('fs');
+const path = require('path');
+const os = require('os');
+
+// カラー出力用の定数
+const colors = {
+  red: '\x1b[31m',
+  green: '\x1b[32m',
+  yellow: '\x1b[33m',
+  blue: '\x1b[34m',
+  magenta: '\x1b[35m',
+  cyan: '\x1b[36m',
+  white: '\x1b[37m',
+  reset: '\x1b[0m',
+  bold: '\x1b[1m'
+};
+
+// ログ出力関数
+function log(message, color = colors.white) {
+  console.log(`${color}${message}${colors.reset}`);
+}
+
+function logSuccess(message) {
+  log(`✅ ${message}`, colors.green);
+}
+
+function logError(message) {
+  log(`❌ ${message}`, colors.red);
+}
+
+function logWarning(message) {
+  log(`⚠️  ${message}`, colors.yellow);
+}
+
+function logInfo(message) {
+  log(`ℹ️  ${message}`, colors.blue);
+}
+
+function logHeader(message) {
+  log(`\n${colors.bold}🚀 ${message}${colors.reset}`, colors.cyan);
+}
+
+// バージョンチェック関数
+function checkVersion(command, args, minVersion, name) {
+  try {
+    const output = execSync(`${command} ${args}`, { encoding: 'utf8', stdio: 'pipe' });
+    const version = output.trim();
+    logSuccess(`${name}: ${version}`);
+    return true;
+  } catch (error) {
+    logError(`${name} is not installed or not accessible`);
+    return false;
+  }
+}
+
+// ディレクトリ作成関数
+function ensureDirectory(dirPath) {
+  if (!fs.existsSync(dirPath)) {
+    fs.mkdirSync(dirPath, { recursive: true });
+    logSuccess(`Created directory: ${dirPath}`);
+  } else {
+    logInfo(`Directory already exists: ${dirPath}`);
+  }
+}
+
+// 設定ファイル作成関数
+function createConfigFile(filePath, content) {
+  try {
+    ensureDirectory(path.dirname(filePath));
+    
+    if (!fs.existsSync(filePath)) {
+      fs.writeFileSync(filePath, content, 'utf8');
+      logSuccess(`Created config file: ${filePath}`);
+    } else {
+      logInfo(`Config file already exists: ${filePath}`);
+    }
+  } catch (error) {
+    logError(`Failed to create config file ${filePath}: ${error.message}`);
+    throw error;
+  }
+}
+
+// メイン設定関数
+async function main() {
+  logHeader('Renkei System Setup');
+  
+  try {
+    // 1. 環境チェック
+    logHeader('Environment Check');
+    
+    let allDependenciesOk = true;
+    
+    // Node.js チェック
+    if (!checkVersion('node', '--version', '18.0.0', 'Node.js')) {
+      logError('Node.js 18.0.0 or higher is required');
+      allDependenciesOk = false;
+    }
+    
+    // npm チェック
+    if (!checkVersion('npm', '--version', '8.0.0', 'npm')) {
+      logError('npm 8.0.0 or higher is required');
+      allDependenciesOk = false;
+    }
+    
+    // tmux チェック
+    if (!checkVersion('tmux', '-V', '3.0', 'tmux')) {
+      logError('tmux 3.0 or higher is required');
+      logInfo('Install tmux: sudo apt-get install tmux (Ubuntu/Debian) or brew install tmux (macOS)');
+      allDependenciesOk = false;
+    }
+    
+    // Git チェック
+    if (!checkVersion('git', '--version', '2.0.0', 'Git')) {
+      logWarning('Git is recommended but not required');
+    }
+    
+    // ClaudeCode チェック (オプショナル)
+    if (!checkVersion('claude-code', '--version', '1.0.0', 'ClaudeCode')) {
+      logWarning('ClaudeCode not found - will be required for AI features');
+      logInfo('Install ClaudeCode from: https://github.com/anthropics/claude-code');
+    }
+    
+    if (!allDependenciesOk) {
+      logError('Required dependencies are missing. Please install them and try again.');
+      process.exit(1);
+    }
+    
+    // 2. 依存関係インストール
+    logHeader('Installing Dependencies');
+    
+    const packageJsonPath = path.join(process.cwd(), 'package.json');
+    if (fs.existsSync(packageJsonPath)) {
+      logInfo('Installing npm dependencies...');
+      try {
+        execSync('npm install', { stdio: 'inherit' });
+        logSuccess('Dependencies installed successfully');
+      } catch (error) {
+        logError('Failed to install dependencies');
+        throw error;
+      }
+    } else {
+      logWarning('package.json not found. Skipping dependency installation.');
+    }
+    
+    // 3. ディレクトリ構造作成
+    logHeader('Creating Directory Structure');
+    
+    const directories = [
+      'data',
+      'data/sessions',
+      'data/logs',
+      'data/backups',
+      'workspace',
+      'workspace/projects',
+      'workspace/temp'
+    ];
+    
+    directories.forEach(dir => {
+      ensureDirectory(path.join(process.cwd(), dir));
+    });
+    
+    // 4. 設定ファイル初期化
+    logHeader('Initializing Configuration Files');
+    
+    // ユーザー設定ファイル
+    const userSettingsPath = path.join(process.cwd(), 'data/user-settings.json');
+    const defaultUserSettings = {
+      version: '1.0.0',
+      workspaceDir: path.join(process.cwd(), 'workspace'),
+      sessionDir: path.join(process.cwd(), 'data/sessions'),
+      tmux: {
+        sessionName: 'renkei-session',
+        mainPaneTitle: 'Renkei Main',
+        subPaneTitle: 'Renkei Output',
+        splitDirection: 'vertical',
+        mainPaneSize: 80
+      },
+      claude: {
+        maxTurns: 50,
+        timeout: 60000,
+        outputFormat: 'json',
+        allowedTools: [
+          'read_file',
+          'write_to_file',
+          'execute_command',
+          'list_files'
+        ]
+      },
+      permissions: {
+        permissions: {
+          allow: [
+            'file_operations',
+            'terminal_access',
+            'project_navigation'
+          ],
+          deny: [
+            'system_config',
+            'network_access'
+          ]
+        },
+        autoApprove: false,
+        dangerousCommands: [
+          'rm -rf',
+          'format',
+          'fdisk',
+          'mkfs'
+        ]
+      }
+    };
+    
+    createConfigFile(userSettingsPath, JSON.stringify(defaultUserSettings, null, 2));
+    
+    // ワークスペース設定ファイル
+    const workspaceSettingsPath = path.join(process.cwd(), 'workspace/settings.json');
+    const workspaceSettings = {
+      permissions: defaultUserSettings.permissions.permissions,
+      autoApprove: defaultUserSettings.permissions.autoApprove
+    };
+    
+    createConfigFile(workspaceSettingsPath, JSON.stringify(workspaceSettings, null, 2));
+    
+    // .gitignore 更新
+    const gitignorePath = path.join(process.cwd(), '.gitignore');
+    const gitignoreEntries = [
+      '',
+      '# Renkei System',
+      'data/sessions/*',
+      'data/logs/*',
+      'data/backups/*',
+      'data/user-settings.json',
+      'workspace/temp/*',
+      'workspace/projects/*',
+      '!workspace/projects/.gitkeep',
+      'coverage/',
+      'node_modules/',
+      '*.log'
+    ];
+    
+    if (fs.existsSync(gitignorePath)) {
+      const existingContent = fs.readFileSync(gitignorePath, 'utf8');
+      const newEntries = gitignoreEntries.filter(entry => 
+        entry && !existingContent.includes(entry)
+      );
+      
+      if (newEntries.length > 0) {
+        fs.appendFileSync(gitignorePath, '\n' + newEntries.join('\n'));
+        logSuccess('Updated .gitignore');
+      } else {
+        logInfo('.gitignore already up to date');
+      }
+    } else {
+      fs.writeFileSync(gitignorePath, gitignoreEntries.join('\n'));
+      logSuccess('Created .gitignore');
+    }
+    
+    // keep ファイル作成
+    const keepFiles = [
+      'data/sessions/.gitkeep',
+      'data/logs/.gitkeep',
+      'data/backups/.gitkeep',
+      'workspace/projects/.gitkeep',
+      'workspace/temp/.gitkeep'
+    ];
+    
+    keepFiles.forEach(keepFile => {
+      const fullPath = path.join(process.cwd(), keepFile);
+      if (!fs.existsSync(fullPath)) {
+        fs.writeFileSync(fullPath, '');
+        logSuccess(`Created ${keepFile}`);
+      }
+    });
+    
+    // 5. システム情報表示
+    logHeader('System Information');
+    
+    logInfo(`Platform: ${os.platform()} ${os.arch()}`);
+    logInfo(`Node.js: ${process.version}`);
+    logInfo(`Working Directory: ${process.cwd()}`);
+    logInfo(`Home Directory: ${os.homedir()}`);
+    
+    // 6. セットアップ完了
+    logHeader('Setup Complete');
+    
+    logSuccess('Renkei System has been set up successfully!');
+    logInfo('');
+    logInfo('Next steps:');
+    logInfo('1. Run "npm run build" to compile TypeScript');
+    logInfo('2. Run "npm test" to verify the installation');
+    logInfo('3. Run "scripts/renkei-start" to start the system');
+    logInfo('');
+    logInfo('For help and documentation, visit:');
+    logInfo('- GitHub: https://github.com/happy-ryo/renkei');
+    logInfo('- Docs: ./docs/renkei/README.md');
+    
+  } catch (error) {
+    logError(`Setup failed: ${error.message}`);
+    logInfo('Please check the error above and try again.');
+    logInfo('If the problem persists, please check the documentation or report an issue.');
+    process.exit(1);
+  }
+}
+
+// スクリプト実行
+if (require.main === module) {
+  main().catch(error => {
+    logError(`Unexpected error: ${error.message}`);
+    process.exit(1);
+  });
+}
+
+module.exports = { main };

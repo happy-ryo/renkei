@@ -1,0 +1,443 @@
+#!/usr/bin/env node
+
+/**
+ * Renkei System - Start Script
+ * tmuxセッション起動・システム開始
+ */
+
+const { execSync, spawn } = require('child_process');
+const fs = require('fs');
+const path = require('path');
+const os = require('os');
+
+// カラー出力用の定数
+const colors = {
+  red: '\x1b[31m',
+  green: '\x1b[32m',
+  yellow: '\x1b[33m',
+  blue: '\x1b[34m',
+  magenta: '\x1b[35m',
+  cyan: '\x1b[36m',
+  white: '\x1b[37m',
+  reset: '\x1b[0m',
+  bold: '\x1b[1m'
+};
+
+// ログ出力関数
+function log(message, color = colors.white) {
+  console.log(`${color}${message}${colors.reset}`);
+}
+
+function logSuccess(message) {
+  log(`✅ ${message}`, colors.green);
+}
+
+function logError(message) {
+  log(`❌ ${message}`, colors.red);
+}
+
+function logWarning(message) {
+  log(`⚠️  ${message}`, colors.yellow);
+}
+
+function logInfo(message) {
+  log(`ℹ️  ${message}`, colors.blue);
+}
+
+function logHeader(message) {
+  log(`\n${colors.bold}🚀 ${message}${colors.reset}`, colors.cyan);
+}
+
+// 設定ファイル読み込み
+function loadConfig() {
+  const userSettingsPath = path.join(process.cwd(), 'data/user-settings.json');
+  const defaultSettingsPath = path.join(process.cwd(), 'config/default-settings.json');
+  
+  let config;
+  
+  try {
+    if (fs.existsSync(userSettingsPath)) {
+      config = JSON.parse(fs.readFileSync(userSettingsPath, 'utf8'));
+      logInfo(`Loaded user settings from: ${userSettingsPath}`);
+    } else if (fs.existsSync(defaultSettingsPath)) {
+      config = JSON.parse(fs.readFileSync(defaultSettingsPath, 'utf8'));
+      logInfo(`Loaded default settings from: ${defaultSettingsPath}`);
+    } else {
+      throw new Error('No configuration file found. Please run "scripts/renkei-setup" first.');
+    }
+    
+    return config;
+  } catch (error) {
+    logError(`Failed to load configuration: ${error.message}`);
+    throw error;
+  }
+}
+
+// tmuxセッション存在チェック
+function checkTmuxSession(sessionName) {
+  try {
+    execSync(`tmux has-session -t ${sessionName}`, { stdio: 'pipe' });
+    return true;
+  } catch (error) {
+    return false;
+  }
+}
+
+// tmuxセッション作成
+function createTmuxSession(config) {
+  const sessionName = config.tmux.sessionName;
+  
+  if (checkTmuxSession(sessionName)) {
+    logWarning(`tmux session '${sessionName}' already exists`);
+    logInfo('Attaching to existing session...');
+    
+    try {
+      execSync(`tmux attach-session -t ${sessionName}`, { stdio: 'inherit' });
+      return;
+    } catch (error) {
+      logError(`Failed to attach to existing session: ${error.message}`);
+      throw error;
+    }
+  }
+  
+  try {
+    // 新しいtmuxセッション作成
+    logInfo(`Creating tmux session: ${sessionName}`);
+    
+    // セッション作成コマンド構築
+    const tmuxCommand = [
+      'tmux',
+      'new-session',
+      '-d',
+      '-s', sessionName,
+      '-x', '120',
+      '-y', '40',
+      '-c', process.cwd()
+    ];
+    
+    execSync(tmuxCommand.join(' '), { stdio: 'pipe' });
+    logSuccess(`Created tmux session: ${sessionName}`);
+    
+    // メインペインのタイトル設定
+    execSync(`tmux select-pane -t ${sessionName}:0.0 -T "${config.tmux.mainPaneTitle}"`, { stdio: 'pipe' });
+    
+    // 垂直分割でサブペイン作成
+    if (config.tmux.splitDirection === 'vertical') {
+      execSync(`tmux split-window -t ${sessionName} -v -p 20`, { stdio: 'pipe' });
+    } else {
+      execSync(`tmux split-window -t ${sessionName} -h -p 30`, { stdio: 'pipe' });
+    }
+    
+    // サブペインのタイトル設定
+    execSync(`tmux select-pane -t ${sessionName}:0.1 -T "${config.tmux.subPaneTitle}"`, { stdio: 'pipe' });
+    
+    // メインペインにフォーカス
+    execSync(`tmux select-pane -t ${sessionName}:0.0`, { stdio: 'pipe' });
+    
+    logSuccess('tmux session layout configured');
+    
+  } catch (error) {
+    logError(`Failed to create tmux session: ${error.message}`);
+    throw error;
+  }
+}
+
+// TypeScriptビルド
+function buildTypeScript() {
+  try {
+    logInfo('Building TypeScript...');
+    
+    // TypeScript設定ファイル確認
+    const tsconfigPath = path.join(process.cwd(), 'tsconfig.json');
+    if (!fs.existsSync(tsconfigPath)) {
+      logWarning('tsconfig.json not found. Skipping TypeScript build.');
+      return;
+    }
+    
+    // ビルド実行
+    execSync('npm run build', { stdio: 'inherit' });
+    logSuccess('TypeScript build completed');
+    
+  } catch (error) {
+    logError(`TypeScript build failed: ${error.message}`);
+    throw error;
+  }
+}
+
+// システム起動
+function startSystem(config) {
+  try {
+    logInfo('Starting Renkei System...');
+    
+    const sessionName = config.tmux.sessionName;
+    
+    // メインペインでシステム起動
+    const startCommand = `node dist/index.js`;
+    execSync(`tmux send-keys -t ${sessionName}:0.0 "${startCommand}" Enter`, { stdio: 'pipe' });
+    
+    // サブペインで監視表示
+    const monitorCommand = `echo "Renkei System Output Monitor" && echo "System started at $(date)"`;
+    execSync(`tmux send-keys -t ${sessionName}:0.1 "${monitorCommand}" Enter`, { stdio: 'pipe' });
+    
+    logSuccess('System startup commands sent to tmux session');
+    
+  } catch (error) {
+    logError(`Failed to start system: ${error.message}`);
+    throw error;
+  }
+}
+
+// 初期画面表示
+function displayWelcomeScreen(config) {
+  try {
+    const sessionName = config.tmux.sessionName;
+    
+    // ウェルカムメッセージをサブペインに送信
+    const welcomeMessages = [
+      '',
+      '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+      '🤖 Renkei System - AI Development Assistant',
+      '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+      '',
+      '✅ System initialized successfully',
+      '🔧 tmux session active',
+      '📁 Workspace ready',
+      '',
+      'Available commands:',
+      '  help     - Show command help',
+      '  status   - System status',
+      '  config   - Configuration management',
+      '  stop     - Stop the system',
+      '',
+      'Ready for AI-assisted development!',
+      '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+      ''
+    ];
+    
+    // メッセージをサブペインに送信
+    welcomeMessages.forEach(message => {
+      execSync(`tmux send-keys -t ${sessionName}:0.1 "echo '${message}'" Enter`, { stdio: 'pipe' });
+    });
+    
+    logSuccess('Welcome screen displayed');
+    
+  } catch (error) {
+    logWarning(`Failed to display welcome screen: ${error.message}`);
+    // 非致命的エラーとして継続
+  }
+}
+
+// セッション状態保存
+function saveSessionState(config) {
+  try {
+    const sessionDir = config.sessionDir || path.join(process.cwd(), 'data/sessions');
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const sessionStateFile = path.join(sessionDir, `session-${timestamp}.json`);
+    
+    const sessionState = {
+      timestamp: new Date().toISOString(),
+      sessionName: config.tmux.sessionName,
+      workspaceDir: config.workspaceDir,
+      pid: process.pid,
+      platform: os.platform(),
+      nodeVersion: process.version
+    };
+    
+    // ディレクトリ確認・作成
+    if (!fs.existsSync(sessionDir)) {
+      fs.mkdirSync(sessionDir, { recursive: true });
+    }
+    
+    fs.writeFileSync(sessionStateFile, JSON.stringify(sessionState, null, 2));
+    logInfo(`Session state saved: ${sessionStateFile}`);
+    
+  } catch (error) {
+    logWarning(`Failed to save session state: ${error.message}`);
+    // 非致命的エラーとして継続
+  }
+}
+
+// 環境チェック
+function preflightCheck() {
+  logHeader('Preflight Check');
+  
+  let allChecksPass = true;
+  
+  // Node.js チェック
+  try {
+    const nodeVersion = process.version;
+    logSuccess(`Node.js: ${nodeVersion}`);
+  } catch (error) {
+    logError('Node.js version check failed');
+    allChecksPass = false;
+  }
+  
+  // tmux チェック
+  try {
+    const tmuxVersion = execSync('tmux -V', { encoding: 'utf8', stdio: 'pipe' });
+    logSuccess(`tmux: ${tmuxVersion.trim()}`);
+  } catch (error) {
+    logError('tmux is not available');
+    allChecksPass = false;
+  }
+  
+  // 必要なディレクトリチェック
+  const requiredDirs = ['data', 'workspace', 'scripts'];
+  requiredDirs.forEach(dir => {
+    const dirPath = path.join(process.cwd(), dir);
+    if (fs.existsSync(dirPath)) {
+      logSuccess(`Directory exists: ${dir}`);
+    } else {
+      logError(`Required directory missing: ${dir}`);
+      allChecksPass = false;
+    }
+  });
+  
+  // package.json チェック
+  const packageJsonPath = path.join(process.cwd(), 'package.json');
+  if (fs.existsSync(packageJsonPath)) {
+    logSuccess('package.json found');
+  } else {
+    logError('package.json not found');
+    allChecksPass = false;
+  }
+  
+  if (!allChecksPass) {
+    logError('Preflight check failed. Please run "scripts/renkei-setup" first.');
+    process.exit(1);
+  }
+  
+  logSuccess('Preflight check completed');
+}
+
+// メイン関数
+async function main() {
+  logHeader('Renkei System Start');
+  
+  try {
+    // 1. 環境チェック
+    preflightCheck();
+    
+    // 2. 設定読み込み
+    logHeader('Loading Configuration');
+    const config = loadConfig();
+    
+    // 3. TypeScriptビルド
+    logHeader('Building Application');
+    buildTypeScript();
+    
+    // 4. tmuxセッション作成
+    logHeader('Setting up tmux Session');
+    createTmuxSession(config);
+    
+    // 5. システム起動
+    logHeader('Starting System');
+    startSystem(config);
+    
+    // 6. 初期画面表示
+    logHeader('Displaying Welcome Screen');
+    displayWelcomeScreen(config);
+    
+    // 7. セッション状態保存
+    saveSessionState(config);
+    
+    // 8. 起動完了
+    logHeader('Startup Complete');
+    logSuccess('Renkei System has been started successfully!');
+    logInfo('');
+    logInfo('To attach to the tmux session, run:');
+    logInfo(`  tmux attach-session -t ${config.tmux.sessionName}`);
+    logInfo('');
+    logInfo('To stop the system, run:');
+    logInfo('  scripts/renkei-stop');
+    logInfo('');
+    logInfo('Session logs are available in: data/sessions/');
+    
+    // tmuxセッションにアタッチ
+    logInfo('Attaching to tmux session...');
+    setTimeout(() => {
+      try {
+        execSync(`tmux attach-session -t ${config.tmux.sessionName}`, { stdio: 'inherit' });
+      } catch (error) {
+        logWarning(`Failed to attach to session: ${error.message}`);
+        logInfo('You can manually attach with:');
+        logInfo(`  tmux attach-session -t ${config.tmux.sessionName}`);
+      }
+    }, 1000);
+    
+  } catch (error) {
+    logError(`Startup failed: ${error.message}`);
+    logInfo('Please check the error above and try again.');
+    logInfo('If setup is incomplete, run "scripts/renkei-setup" first.');
+    process.exit(1);
+  }
+}
+
+// コマンドライン引数処理
+function parseArguments() {
+  const args = process.argv.slice(2);
+  const options = {
+    help: false,
+    debug: false,
+    noAttach: false
+  };
+  
+  for (const arg of args) {
+    switch (arg) {
+      case '--help':
+      case '-h':
+        options.help = true;
+        break;
+      case '--debug':
+      case '-d':
+        options.debug = true;
+        break;
+      case '--no-attach':
+        options.noAttach = true;
+        break;
+      default:
+        logWarning(`Unknown option: ${arg}`);
+    }
+  }
+  
+  return options;
+}
+
+// ヘルプ表示
+function showHelp() {
+  logHeader('Renkei Start - Help');
+  logInfo('');
+  logInfo('Usage: scripts/renkei-start [options]');
+  logInfo('');
+  logInfo('Options:');
+  logInfo('  -h, --help       Show this help message');
+  logInfo('  -d, --debug      Enable debug mode');
+  logInfo('  --no-attach      Start without attaching to tmux session');
+  logInfo('');
+  logInfo('Examples:');
+  logInfo('  scripts/renkei-start              # Normal startup');
+  logInfo('  scripts/renkei-start --debug      # Debug mode');
+  logInfo('  scripts/renkei-start --no-attach  # Background start');
+}
+
+// スクリプト実行
+if (require.main === module) {
+  const options = parseArguments();
+  
+  if (options.help) {
+    showHelp();
+    process.exit(0);
+  }
+  
+  if (options.debug) {
+    logInfo('Debug mode enabled');
+    process.env.RENKEI_DEBUG = 'true';
+  }
+  
+  main().catch(error => {
+    logError(`Unexpected error: ${error.message}`);
+    process.exit(1);
+  });
+}
+
+module.exports = { main, loadConfig };
