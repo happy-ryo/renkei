@@ -106,12 +106,12 @@ export class ThreePaneLayout {
   }
 
   private createBottomPane(): string {
-    const { sessionName, mainPaneHeightPercent } = this.config;
-    const bottomHeightPercent = 100 - mainPaneHeightPercent;
+    const { sessionName } = this.config;
     
     // メインペインを垂直に分割（下部用のペインを作成）
+    // tmux 3.4では-lオプションを使用して行数で指定
     const bottomPaneId = execSync(
-      `tmux split-window -t ${sessionName}:0 -v -p ${bottomHeightPercent} -P -F "#{pane_id}"`,
+      `tmux split-window -t ${sessionName}:0 -v -l 20 -P -F "#{pane_id}"`,
       { encoding: 'utf8' }
     ).trim();
     
@@ -119,11 +119,10 @@ export class ThreePaneLayout {
   }
 
   private splitBottomPane(bottomPaneId: string): { chatPaneId: string; statusPaneId: string } {
-    const { chatPaneWidthPercent } = this.config;
-    
     // 下部ペインを水平に分割（左: チャット、右: ステータス）
+    // -lオプションで列数を指定（60列）
     const statusPaneId = execSync(
-      `tmux split-window -t ${bottomPaneId} -h -p ${100 - chatPaneWidthPercent} -P -F "#{pane_id}"`,
+      `tmux split-window -t ${bottomPaneId} -h -l 60 -P -F "#{pane_id}"`,
       { encoding: 'utf8' }
     ).trim();
     
