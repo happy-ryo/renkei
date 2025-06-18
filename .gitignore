@@ -127,3 +127,11 @@ tmux-*
 # Claude Code specific
 .claude/
 claude-sessions/
+
+# Renkei System
+data/sessions/*
+data/logs/*
+data/backups/*
+workspace/temp/*
+workspace/projects/*
+!workspace/projects/.gitkeep
