@@ -18,8 +18,10 @@ export interface TmuxConfig {
   sessionName: string;
   mainPaneTitle: string;
   subPaneTitle: string;
+  chatPaneTitle?: string;
   splitDirection: 'horizontal' | 'vertical';
   mainPaneSize: number;
+  chatPaneSize?: number;
 }
 
 export interface ClaudeConfig {

@@ -6,8 +6,10 @@
     "sessionName": "renkei",
     "mainPaneTitle": "AI Manager",
     "subPaneTitle": "ClaudeCode Status",
+    "chatPaneTitle": "💬 Interactive Chat",
     "splitDirection": "horizontal",
-    "mainPaneSize": 70
+    "mainPaneSize": 50,
+    "chatPaneSize": 50
   },
   "claude": {
     "apiKey": "",

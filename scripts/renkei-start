@@ -142,6 +142,7 @@ function createTmuxSession(config) {
         sessionName,
         mainPaneId: panes[0] || `${sessionName}:0.0`,
         subPaneId: panes[1] || null,
+        chatPaneId: panes[2] || null,
         isExisting: true
       };
     } catch (error) {
