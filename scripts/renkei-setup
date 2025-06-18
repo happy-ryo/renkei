@@ -123,7 +123,7 @@ async function main() {
     }
     
     // ClaudeCode チェック (オプショナル)
-    if (!checkVersion('claude-code', '--version', '1.0.0', 'ClaudeCode')) {
+    if (!checkVersion('claude', '--version', '1.0.0', 'ClaudeCode')) {
       logWarning('ClaudeCode not found - will be required for AI features');
       logInfo('Install ClaudeCode from: https://github.com/anthropics/claude-code');
     }
