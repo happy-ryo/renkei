@@ -135,3 +135,11 @@ data/backups/*
 workspace/temp/*
 workspace/projects/*
 !workspace/projects/.gitkeep
+
+# Workspace runtime files
+workspace/sessions/
+workspace/settings.json
+workspace/test-e2e/
+workspace/*.json
+workspace/*.tmp
+workspace/*.log
