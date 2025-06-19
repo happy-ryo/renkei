@@ -22,6 +22,7 @@ Renkei（連携）は、ClaudeCodeと連携してAI支援開発を実現する�
 - **tmux統合インターフェース**: 分割画面での効率的な作業環境
 - **リアルタイム進捗表示**: 実行状況のライブモニタリング
 - **インタラクティブ制御**: キーボードによる直感的な操作
+- **対話型AIチャット**: 専用ペインでAIと自然な会話
 - **セッション永続化**: 作業状態の保存・復元
 
 ### ⚙️ 高度なシステム機能
@@ -36,7 +37,7 @@ Renkei（連携）は、ClaudeCodeと連携してAI支援開発を実現する�
 
 - **Node.js** 18.0.0 以上
 - **tmux** 3.0 以上
-- **ClaudeCode** (Anthropic Claude Codeエディタ)
+- **Claude CLI** (`claude` コマンド) - [Anthropic Claude](https://claude.ai/)
 - **Git**
 
 ### インストール
@@ -68,9 +69,12 @@ npm test
 # 4. 設定ファイル初期化
 cp config/default-settings.json data/user-settings.json
 
-# 5. ClaudeCode設定
-# - ClaudeCodeでワークスペースを開く
-# - settings.json の permission 設定を確認
+# 5. Claude CLI設定
+# Claudeコマンドが利用できるか確認
+./scripts/check-claude
+
+# 必要に応じてパスを設定
+# data/user-settings.json の claude.executablePath を編集
 ```
 
 ## 📖 使用方法
@@ -94,7 +98,12 @@ cp config/default-settings.json data/user-settings.json
    - 実行ログのリアルタイム更新
    - 品質評価結果の表示
 
-4. **結果確認・継続判断**
+4. **対話型AIチャット**（チャットペインで会話）
+   - 自然な会話形式でタスクを依頼
+   - リアルタイムで応答を確認
+   - コマンド: /help, /clear, /history, /exit
+
+5. **結果確認・継続判断**
    - 実装結果の自動評価
    - 改善提案の確認
    - 次のアクションの決定
@@ -142,12 +151,15 @@ ls data/sessions/
     "sessionName": "renkei-dev",
     "splitDirection": "vertical",
     "mainPaneTitle": "Renkei Main",
-    "subPaneTitle": "System Monitor"
+    "subPaneTitle": "System Monitor",
+    "chatPaneTitle": "💬 Interactive Chat",
+    "chatPane": true
   },
   "claude": {
     "timeout": 30000,
     "maxRetries": 3,
-    "autoApprove": false
+    "autoApprove": false,
+    "executablePath": null  // nullの場合自動検出、またはフルパスを指定
   },
   "workspace": {
     "projectRoot": "./workspace",
@@ -320,6 +332,22 @@ tmux -V
 tmux kill-server
 ```
 
+**Q: Claudeコマンドが見つからない**
+```bash
+# Claudeコマンドの利用可能性をチェック
+./scripts/check-claude
+
+# パスを設定ファイルに追加
+vi data/user-settings.json
+# "executablePath": "/path/to/claude" を追加
+
+# Voltaを使用している場合
+volta install claude
+
+# 一般的なインストール方法
+npm install -g @anthropic-ai/claude
+```
+
 **Q: ClaudeCodeとの接続が失敗する**
 ```bash
 # ClaudeCode設定確認
@@ -344,6 +372,9 @@ npx tsc --noEmit
 ```bash
 # システム全体の診断
 ./scripts/renkei-start --diagnose
+
+# Claudeコマンドの診断
+./scripts/check-claude
 
 # 詳細な環境情報表示
 ./scripts/renkei-start --debug --diagnose
@@ -387,7 +418,13 @@ npx tsc --noEmit
 
 ## 📋 ロードマップ
 
-### Phase 4.2: 統合テスト・最適化 (進行中)
+### Phase 4.3: 対話型AIチャット機能 (完了)
+- [x] 3ペインレイアウト実装
+- [x] ChatInterface/ChatManager実装
+- [x] AI Manager統合
+- [x] Claude CLI統合
+
+### Phase 4.4: 統合テスト・最適化 (進行中)
 - [ ] エンドツーエンドテスト
 - [ ] パフォーマンス最適化
 - [ ] ドキュメント整備
@@ -415,4 +452,5 @@ npx tsc --noEmit
 ```
 作成日: 2025-06-18
 バージョン: 1.0.0
-ステータス: 98% 完成（Phase 4.1 完了）
+ステータス: 99% 完成（Phase 4.3 完了）
+対話型AIチャット機能を統合

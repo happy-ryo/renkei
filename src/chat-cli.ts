@@ -6,9 +6,12 @@
  */
 
 import { ChatInterface, defaultChatConfig } from './ui/chat';
-import { ChatConfig } from './interfaces/chat-types';
+import { ChatConfig, ChatMessage } from './interfaces/chat-types';
+import { ChatManager } from './managers/chat-manager';
+import { AIBridge, createSimpleAIBridge } from './managers/ai-bridge';
 import * as fs from 'fs';
 import * as path from 'path';
+import chalk from 'chalk';
 
 // 設定ファイルの読み込み
 function loadChatConfig(): ChatConfig {
@@ -33,22 +36,88 @@ async function main() {
   // 設定読み込み
   const config = loadChatConfig();
   
+  // チャットマネージャー初期化
+  console.log(chalk.blue('🔄 Initializing Chat Manager...'));
+  const chatManager = new ChatManager();
+  
+  // AIブリッジ初期化
+  console.log(chalk.blue('🔄 Initializing AI Bridge...'));
+  let aiBridge: AIBridge | null = null;
+  
+  try {
+    // ソケットベースのAIBridgeを試す
+    aiBridge = new AIBridge(chatManager);
+    await aiBridge.start();
+    console.log(chalk.green('✅ AI Bridge started successfully'));
+    
+    // AI Managerへの接続を試みる
+    await aiBridge.connectToAIManager();
+  } catch (error) {
+    console.log(chalk.yellow('⚠️  Socket-based AI Bridge failed, using simple bridge'));
+    // フォールバック：シンプルブリッジを使用
+    await createSimpleAIBridge(chatManager);
+  }
+  
   // チャットインターフェース初期化
   const chat = new ChatInterface(config);
   
-  // AIブリッジとの接続設定（後で実装）
-  chat.on('message', (message) => {
+  // セッション作成
+  const session = chatManager.createSession({
+    workingDirectory: process.cwd()
+  });
+  
+  // AI Manager接続状態の監視
+  chatManager.on('ai_manager_connection', (connected: boolean) => {
+    if (connected) {
+      const systemMessage: ChatMessage = {
+        id: Date.now().toString(),
+        role: 'system',
+        content: chalk.green('🔗 AI Managerと接続しました'),
+        timestamp: new Date()
+      };
+      chat.sendMessage(systemMessage);
+    } else {
+      const disconnectMessage: ChatMessage = {
+        id: Date.now().toString(),
+        role: 'system',
+        content: chalk.yellow('⚠️  AI Managerとの接続が切断されました'),
+        timestamp: new Date()
+      };
+      chat.sendMessage(disconnectMessage);
+    }
+  });
+  
+  // チャットメッセージの処理
+  chat.on('message', async (message: ChatMessage) => {
     if (message.role === 'user') {
-      // TODO: AIManagerにメッセージを送信
-      // 仮の応答
-      setTimeout(() => {
-        chat.sendMessage({
-          id: Date.now().toString(),
+      // セッションにメッセージを追加
+      chatManager.addMessageToSession(session.sessionId, message);
+      
+      try {
+        // AI Managerにメッセージを送信
+        const result = await chatManager.sendToAIManager(session.sessionId, message);
+        
+        // 応答をチャットに表示
+        const aiResponse: ChatMessage = {
+          id: result.id,
           role: 'assistant',
-          content: `I received your message: "${message.content}". The AI Manager integration is coming soon!`,
+          content: result.output,
+          timestamp: new Date(result.timestamp)
+        };
+        
+        chat.sendMessage(aiResponse);
+        chatManager.addMessageToSession(session.sessionId, aiResponse);
+        
+      } catch (error) {
+        // エラーメッセージを表示
+        const errorMessage: ChatMessage = {
+          id: Date.now().toString(),
+          role: 'system',
+          content: chalk.red(`❌ エラー: ${error instanceof Error ? error.message : 'Unknown error'}`),
           timestamp: new Date()
-        });
-      }, 500);
+        };
+        chat.sendMessage(errorMessage);
+      }
     }
   });
   
@@ -58,18 +127,30 @@ async function main() {
   });
   
   // セッション終了時の処理
-  chat.on('session_end', () => {
+  chat.on('session_end', async () => {
+    chatManager.endSession(session.sessionId);
+    if (aiBridge) {
+      await aiBridge.stop();
+    }
     process.exit(0);
   });
   
   // プロセス終了時のクリーンアップ
   process.on('SIGINT', async () => {
     await chat.endSession();
+    chatManager.endSession(session.sessionId);
+    if (aiBridge) {
+      await aiBridge.stop();
+    }
     process.exit(0);
   });
   
   process.on('SIGTERM', async () => {
     await chat.endSession();
+    chatManager.endSession(session.sessionId);
+    if (aiBridge) {
+      await aiBridge.stop();
+    }
     process.exit(0);
   });
   

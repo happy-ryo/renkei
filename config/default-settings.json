@@ -9,7 +9,8 @@
     "chatPaneTitle": "💬 Interactive Chat",
     "splitDirection": "horizontal",
     "mainPaneSize": 50,
-    "chatPaneSize": 50
+    "chatPaneSize": 50,
+    "chatPane": true
   },
   "claude": {
     "apiKey": "",
@@ -17,6 +18,7 @@
     "maxTurns": 10,
     "timeout": 300000,
     "outputFormat": "json",
+    "executablePath": null,
     "allowedTools": [
       "Write",
       "Read",

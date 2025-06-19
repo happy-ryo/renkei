@@ -22,6 +22,7 @@ export interface TmuxConfig {
   splitDirection: 'horizontal' | 'vertical';
   mainPaneSize: number;
   chatPaneSize?: number;
+  chatPane?: boolean;
 }
 
 export interface ClaudeConfig {
@@ -31,6 +32,7 @@ export interface ClaudeConfig {
   outputFormat: 'json' | 'text';
   allowedTools: string[];
   autoApprove?: boolean;
+  executablePath?: string | null;
 }
 
 export interface PermissionConfig {

@@ -10,6 +10,8 @@ import { TmuxManager } from './ui/tmux-manager';
 import { AIManager } from './managers/ai-manager';
 import { TaskEvaluator } from './evaluators/task-evaluator';
 import { SessionManager } from './managers/session-manager';
+import { ChatManager } from './managers/chat-manager';
+import { AIBridge } from './managers/ai-bridge';
 import { RenkeiError, ErrorSeverity } from './interfaces/types';
 import chalk from 'chalk';
 import { EventEmitter } from 'events';
@@ -23,6 +25,8 @@ interface SystemComponents {
   aiManager: AIManager;
   taskEvaluator: TaskEvaluator;
   sessionManager: SessionManager;
+  chatManager?: ChatManager;
+  aiBridge?: AIBridge;
 }
 
 class RenkeiSystem extends EventEmitter {
@@ -130,6 +134,21 @@ class RenkeiSystem extends EventEmitter {
       this.setupAIManagerEventHandlers(aiManager);
       console.log(chalk.green('✅ AI Manager が初期化されました'));
 
+      // 3-8. ChatManager の初期化（チャット機能有効時のみ）
+      if (config.tmux.chatPane) {
+        console.log(chalk.yellow('💬 チャット管理システムを初期化しています...'));
+        const chatManager = new ChatManager();
+        this.components.chatManager = chatManager;
+        console.log(chalk.green('✅ ChatManager が初期化されました'));
+
+        // 3-9. AIBridge の初期化
+        console.log(chalk.yellow('🔗 AI Bridgeを初期化しています...'));
+        const aiBridge = new AIBridge(chatManager);
+        await aiBridge.start();
+        this.components.aiBridge = aiBridge;
+        console.log(chalk.green('✅ AIBridge が初期化されました'));
+      }
+
       // システム統合状況の表示
       console.log(chalk.blue.bold('\n📋 システム統合状況:'));
       console.log(chalk.green('✅ ConfigManager - 設定管理システム'));
@@ -140,6 +159,10 @@ class RenkeiSystem extends EventEmitter {
       console.log(chalk.green('✅ TaskEvaluator - タスク評価システム'));
       console.log(chalk.green('✅ SessionManager - セッション管理'));
       console.log(chalk.green('✅ AIManager - 統括AI管理者'));
+      if (this.components.chatManager) {
+        console.log(chalk.green('✅ ChatManager - チャット管理'));
+        console.log(chalk.green('✅ AIBridge - AI統合ブリッジ'));
+      }
 
       // 実装完了フェーズの表示
       console.log(chalk.blue.bold('\n🎯 実装完了フェーズ:'));
@@ -279,6 +302,11 @@ class RenkeiSystem extends EventEmitter {
 
     try {
       // 各コンポーネントのクリーンアップ
+      if (this.components.aiBridge) {
+        await this.components.aiBridge.stop();
+        console.log(chalk.green('✅ AI Bridge をシャットダウンしました'));
+      }
+
       if (this.components.aiManager) {
         await this.components.aiManager.cleanup();
         console.log(chalk.green('✅ AI Manager をシャットダウンしました'));
@@ -338,7 +366,7 @@ class RenkeiSystem extends EventEmitter {
         currentSession = this.components.sessionManager.getCurrentSession();
       }
 
-      // 2. タスクリクエストを作成（シンプル版）
+      // 2. タスクリクエストを作成（AI Manager用の内部型）
       const taskRequestObj = {
         description: userPrompt,
         workingDirectory: process.cwd(),
