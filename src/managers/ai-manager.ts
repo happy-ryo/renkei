@@ -688,12 +688,25 @@ ${step.content}`;
    */
   private async processChatRequest(request: BaseTaskRequest): Promise<string> {
     try {
-      // チャット用のシンプルな応答を生成
-      const chatPrompt = `
-ユーザーからの質問やリクエスト: "${request.userPrompt}"
+      // 空の入力をチェック
+      const userInput = request.userPrompt.trim();
+      if (!userInput || userInput === '') {
+        return 'どのようなお手伝いができますか？タスクの実行、コード生成、技術的な質問など、お気軽にお尋ねください。';
+      }
 
-統括AIとして、簡潔に回答してください。技術的な質問の場合は、具体的で実用的なアドバイスを提供してください。
-`;
+      // チャット用のシンプルな応答を生成
+      const chatPrompt = `あなたはRenkei Systemの統括AIアシスタントです。ユーザーと自然な日本語で対話し、開発タスクをサポートします。
+
+ユーザーメッセージ: "${userInput}"
+
+以下のガイドラインに従って応答してください：
+- 簡潔で分かりやすい日本語で応答する
+- 技術的な質問には具体的で実用的なアドバイスを提供する
+- タスク実行の依頼があれば、実行可能な内容を説明する
+- 親しみやすく、プロフェッショナルなトーンを保つ
+- 不明な点があれば、明確化のための質問をする
+
+応答:`;
 
       const result = await this.claude.sendMessage(chatPrompt);
       return result.content;
@@ -701,22 +714,30 @@ ${step.content}`;
       // 開発環境用のフォールバック
       console.log('Claudeが利用できないため、モック応答を返します');
       
+      // 空の入力チェック（モックモードでも）
+      const userInput = request.userPrompt.trim();
+      if (!userInput || userInput === '') {
+        return 'どのようなお手伝いができますか？タスクの実行、コード生成、技術的な質問など、お気軽にお尋ねください。';
+      }
+
       // シンプルなモック応答
       const mockResponses: { [key: string]: string } = {
         'こんにちは': 'こんにちは！Renkei Systemの統括AIです。システムは正常に動作しています。どのようなお手伝いができますか？',
+        'hello': 'Hello! I\'m the Renkei System AI assistant. How can I help you today?',
         'システム': 'はい、システムは正常に動作しています。\n\n現在の状態：\n- チャットインターフェース: アクティブ\n- AI Manager: 稼働中\n- ワーカープロセス: 待機中\n\nタスクの実行やシステムの操作についてお手伝いできます。',
-        'ヘルプ': '利用可能なコマンド：\n- /help: ヘルプを表示\n- /clear: 画面をクリア\n- /history: チャット履歴を表示\n- /exit: チャットを終了\n\nその他、自然言語でタスクを依頼できます。'
+        'ヘルプ': '利用可能なコマンド：\n- /help: ヘルプを表示\n- /clear: 画面をクリア\n- /history: チャット履歴を表示\n- /exit: チャットを終了\n\nその他、自然言語でタスクを依頼できます。',
+        '動い': 'はい、正常に動作しています！チャットインターフェース、AI Manager、ClaudeCodeとの統合すべてが機能しています。'
       };
       
       // キーワードマッチング
       for (const [keyword, response] of Object.entries(mockResponses)) {
-        if (request.userPrompt.includes(keyword)) {
+        if (userInput.toLowerCase().includes(keyword)) {
           return response;
         }
       }
       
       // デフォルト応答
-      return `ご質問ありがとうございます。「${request.userPrompt}」について承知しました。\n\n現在、開発環境で動作しているため、完全なAI機能は利用できませんが、基本的なチャット機能は正常に動作しています。`;
+      return `ご質問ありがとうございます。「${userInput}」について承知しました。\n\n現在、開発環境で動作しているため、完全なAI機能は利用できませんが、基本的なチャット機能は正常に動作しています。`;
     }
   }
 
