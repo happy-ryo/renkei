@@ -384,9 +384,13 @@ export class ClaudeIntegration extends EventEmitter {
     return new Promise((resolve, reject) => {
       const args = this.buildClaudeCodeArgs(task);
 
-      this.claudeProcess = spawn('claude', args, {
+      // 保存されたclaudeパスを使用
+      const claudePath = this.claudeExecutablePath || 'claude';
+      
+      this.claudeProcess = spawn(claudePath, args, {
         cwd: session.context.workingDirectory,
         stdio: 'pipe',
+        env: { ...process.env },
       });
 
       let stdout = '';

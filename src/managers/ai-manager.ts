@@ -5,6 +5,7 @@ import * as fs from 'fs';
 import { ClaudeIntegration } from '../integrations/claude-integration';
 import { ConfigManager } from './config-manager';
 import { TaskEvaluator } from '../evaluators/task-evaluator';
+import { TmuxManager } from '../ui/tmux-manager';
 import {
   TaskPlan,
   ExecutionResult,
@@ -75,6 +76,8 @@ export class AIManager extends EventEmitter {
   private bridgeServer?: net.Server;
   private bridgeClients: Set<net.Socket> = new Set();
   private chatRequestQueue: Map<string, BaseTaskRequest> = new Map();
+  private tmuxManager?: TmuxManager;
+  private outputPaneId?: string;
 
   constructor(
     claude: ClaudeIntegration,
@@ -89,6 +92,14 @@ export class AIManager extends EventEmitter {
 
     // チャットブリッジとの接続を設定
     this.setupChatBridge();
+  }
+
+  /**
+   * TmuxManagerとoutputペインを設定
+   */
+  setTmuxManager(tmuxManager: TmuxManager, outputPaneId: string): void {
+    this.tmuxManager = tmuxManager;
+    this.outputPaneId = outputPaneId;
   }
 
   /**
@@ -169,15 +180,21 @@ export class AIManager extends EventEmitter {
     console.log('Claude analysis response:', result.content);
 
     try {
-      // 不完全なJSONを修正（{と}で囲まれていない場合）
-      let jsonContent = result.content.trim();
-      if (!jsonContent.startsWith('{')) {
-        jsonContent = '{' + jsonContent;
-      }
-      if (!jsonContent.endsWith('}')) {
-        jsonContent = jsonContent + '}';
-      }
+      // JSON部分を抽出
+      let jsonContent = result.content || '';
       
+      // 方法1: マークダウンのコードブロック
+      const codeBlockMatch = jsonContent.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+      if (codeBlockMatch && codeBlockMatch[1]) {
+        jsonContent = codeBlockMatch[1].trim();
+      } else {
+        // 方法2: 最初の{から最後の}までを抽出
+        const jsonMatch = jsonContent.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          jsonContent = jsonMatch[0];
+        }
+      }
+
       const analysis = JSON.parse(jsonContent);
       this.emit(AIManagerEvents.NATURAL_LANGUAGE_ANALYSIS_COMPLETED, analysis);
       return analysis;
@@ -255,7 +272,22 @@ export class AIManager extends EventEmitter {
     console.log('Claude planning response:', result.content);
 
     try {
-      const plan = JSON.parse(result.content);
+      // JSON部分を抽出
+      let jsonContent = result.content || '';
+      
+      // 方法1: マークダウンのコードブロック
+      const codeBlockMatch = jsonContent.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+      if (codeBlockMatch && codeBlockMatch[1]) {
+        jsonContent = codeBlockMatch[1].trim();
+      } else {
+        // 方法2: 最初の{から最後の}までを抽出
+        const jsonMatch = jsonContent.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          jsonContent = jsonMatch[0];
+        }
+      }
+
+      const plan = JSON.parse(jsonContent);
       this.emit(AIManagerEvents.IMPLEMENTATION_PLAN_GENERATED, plan);
       return plan;
     } catch (parseError) {
@@ -302,7 +334,22 @@ export class AIManager extends EventEmitter {
     const result = await this.claude.sendMessage(riskPrompt);
 
     try {
-      const riskAssessment = JSON.parse(result.content);
+      // JSON部分を抽出
+      let jsonContent = result.content || '';
+      
+      // 方法1: マークダウンのコードブロック
+      const codeBlockMatch = jsonContent.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+      if (codeBlockMatch && codeBlockMatch[1]) {
+        jsonContent = codeBlockMatch[1].trim();
+      } else {
+        // 方法2: 最初の{から最後の}までを抽出
+        const jsonMatch = jsonContent.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          jsonContent = jsonMatch[0];
+        }
+      }
+
+      const riskAssessment = JSON.parse(jsonContent);
       this.emit(AIManagerEvents.RISK_ASSESSMENT_COMPLETED, riskAssessment);
       return riskAssessment;
     } catch (parseError) {
@@ -411,7 +458,32 @@ export class AIManager extends EventEmitter {
    */
   private async executeStep(step: any): Promise<any> {
     const instruction = this.generateClaudeInstruction(step);
+    
+    // outputペインに実行開始を表示
+    if (this.tmuxManager && this.outputPaneId) {
+      await this.tmuxManager.appendToPaneContent(
+        this.outputPaneId,
+        `\n🔧 実行ステップ: ${step.description}\n${'─'.repeat(50)}\n`
+      );
+      await this.tmuxManager.appendToPaneContent(
+        this.outputPaneId,
+        `📝 指示内容:\n${instruction}\n\n`
+      );
+    }
+
     const result = await this.claude.sendMessage(instruction);
+
+    // outputペインに実行結果を表示
+    if (this.tmuxManager && this.outputPaneId) {
+      await this.tmuxManager.appendToPaneContent(
+        this.outputPaneId,
+        `\n📊 実行結果:\n${result.content}\n`
+      );
+      await this.tmuxManager.appendToPaneContent(
+        this.outputPaneId,
+        `\n✅ ステップ完了 (${result.duration || 0}ms)\n${'─'.repeat(50)}\n`
+      );
+    }
 
     return {
       stepId: step.id,
@@ -761,8 +833,56 @@ ${step.content}`;
           // タスクを分析
           const plan = await this.analyzeTask(taskRequest);
 
-          // シンプルな応答を返す（実際の実行は別プロセスで）
-          return `承知いたしました。以下のタスクを実行します：\n\n${plan.description}\n\n実行を開始しています...`;
+          // outputペインに分析結果を表示
+          if (this.tmuxManager && this.outputPaneId) {
+            await this.tmuxManager.appendToPaneContent(
+              this.outputPaneId,
+              `\n📋 タスク分析完了\n${'─'.repeat(50)}\n`
+            );
+            await this.tmuxManager.appendToPaneContent(
+              this.outputPaneId,
+              `📌 タスク: ${plan.title}\n`
+            );
+            await this.tmuxManager.appendToPaneContent(
+              this.outputPaneId,
+              `📝 説明: ${plan.description}\n`
+            );
+            await this.tmuxManager.appendToPaneContent(
+              this.outputPaneId,
+              `⏱️  推定時間: ${plan.estimatedDuration}分\n`
+            );
+            await this.tmuxManager.appendToPaneContent(
+              this.outputPaneId,
+              `🎯 信頼度: ${Math.round((plan.confidence || 0) * 100)}%\n\n`
+            );
+          }
+
+          // タスクを実行（非同期で実行し、結果は後で返す）
+          this.executeTask(plan).then(
+            (result) => {
+              console.log('Task execution completed:', result);
+              // 実行完了をoutputペインに表示
+              if (this.tmuxManager && this.outputPaneId) {
+                this.tmuxManager.appendToPaneContent(
+                  this.outputPaneId,
+                  `\n✅ タスク実行完了！\n実行時間: ${result.duration}ms\n${'─'.repeat(50)}\n`
+                );
+              }
+            },
+            (error) => {
+              console.error('Task execution failed:', error);
+              // エラーをoutputペインに表示
+              if (this.tmuxManager && this.outputPaneId) {
+                this.tmuxManager.appendToPaneContent(
+                  this.outputPaneId,
+                  `\n❌ タスク実行エラー: ${error.message}\n${'─'.repeat(50)}\n`
+                );
+              }
+            }
+          );
+
+          // 即座に応答を返す
+          return `承知いたしました。以下のタスクを実行します：\n\n📌 ${plan.title}\n${plan.description}\n\n実行を開始しました。進捗はoutputペインでご確認ください。`;
         } catch (error) {
           return `申し訳ございません。タスクの分析中にエラーが発生しました: ${error instanceof Error ? error.message : 'Unknown error'}`;
         }

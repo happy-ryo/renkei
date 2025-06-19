@@ -8,6 +8,7 @@ import { createSettingsManager } from './integrations/settings-manager';
 import { createResultProcessor } from './integrations/result-processor';
 import { TmuxManager } from './ui/tmux-manager';
 import { AIManager } from './managers/ai-manager';
+import { TaskManager } from './managers/task-manager';
 import { TaskEvaluator } from './evaluators/task-evaluator';
 import { SessionManager } from './managers/session-manager';
 import { ChatManager } from './managers/chat-manager';
@@ -23,6 +24,7 @@ interface SystemComponents {
   resultProcessor: any;
   tmuxManager: TmuxManager;
   aiManager: AIManager;
+  taskManager: TaskManager;
   taskEvaluator: TaskEvaluator;
   sessionManager: SessionManager;
   chatManager?: ChatManager;
@@ -132,9 +134,54 @@ class RenkeiSystem extends EventEmitter {
       
       // AIManagerのイベント監視
       this.setupAIManagerEventHandlers(aiManager);
+      
+      // AIManagerにTmuxManagerを設定
+      if (tmuxManager) {
+        // @ts-ignore - AIManagerにsetTmuxManagerメソッドが存在する
+        if (typeof aiManager.setTmuxManager === 'function') {
+          // outputペインのIDを取得
+          // renkei-startで作成される3番目のペイン（Renkei Output）を使用
+          const outputPaneId = '%2';  // tmuxのペインIDは%で始まる
+          console.log(chalk.gray(`   Output pane ID: ${outputPaneId}`));
+          aiManager.setTmuxManager(tmuxManager, outputPaneId);
+        }
+      }
+      
       console.log(chalk.green('✅ AI Manager が初期化されました'));
 
-      // 3-8. ChatManager の初期化（チャット機能有効時のみ）
+      // 3-8. TaskManager の初期化
+      console.log(chalk.yellow('📋 タスク管理システムを初期化しています...'));
+      const taskManagerConfig = {
+        maxIterations: 10,
+        maxDuration: 60, // 60分
+        qualityThreshold: 0.8,
+        autoEvaluationInterval: 5, // 5分ごと
+        enableContinuousImprovement: true,
+        escalationThreshold: 3, // 3回失敗でエスカレーション
+      };
+      const taskManager = new TaskManager(
+        taskManagerConfig,
+        aiManager, // 既に初期化済みのAIManager
+        this.components.claudeIntegration,
+        configManager
+      );
+      this.components.taskManager = taskManager;
+      
+      // TaskManagerにTmuxManagerを設定
+      if (tmuxManager) {
+        // @ts-ignore - TaskManagerにsetTmuxManagerメソッドが存在する
+        if (typeof taskManager.setTmuxManager === 'function') {
+          // outputペインのIDを取得
+          // renkei-startで作成される3番目のペイン（Renkei Output）を使用
+          const outputPaneId = '%2';  // tmuxのペインIDは%で始まる
+          console.log(chalk.gray(`   Output pane ID for TaskManager: ${outputPaneId}`));
+          taskManager.setTmuxManager(tmuxManager, outputPaneId);
+        }
+      }
+      
+      console.log(chalk.green('✅ TaskManager が初期化されました'));
+
+      // 3-9. ChatManager の初期化（チャット機能有効時のみ）
       if (config.tmux.chatPane) {
         console.log(chalk.yellow('💬 チャット管理システムを初期化しています...'));
         const chatManager = new ChatManager();
@@ -445,6 +492,35 @@ class RenkeiSystem extends EventEmitter {
 
   isSystemRunning(): boolean {
     return this.isRunning;
+  }
+
+  /**
+   * タスク実行専用メソッド（システムを停止しない）
+   */
+  async executeTaskOnly(userPrompt: string, priority: 'low' | 'medium' | 'high' = 'medium'): Promise<string> {
+    // executeTaskと同じ実装だが、システムは継続して動作
+    return this.executeTask(userPrompt, priority);
+  }
+
+  /**
+   * システムを部分的にシャットダウン（必要最小限のクリーンアップ）
+   */
+  async partialShutdown(): Promise<void> {
+    console.log(chalk.blue('🔄 一時的なクリーンアップを実行しています...'));
+    
+    // ClaudeIntegrationのセッションのみクリーンアップ
+    if (this.components.claudeIntegration) {
+      const sessions = this.components.claudeIntegration.getSessions();
+      for (const session of sessions) {
+        try {
+          await this.components.claudeIntegration.destroySession(session.sessionId);
+        } catch (error) {
+          console.warn('Session cleanup error:', error);
+        }
+      }
+    }
+    
+    console.log(chalk.green('✅ クリーンアップが完了しました'));
   }
 }
 
