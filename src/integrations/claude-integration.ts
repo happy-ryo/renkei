@@ -33,7 +33,6 @@ export class ClaudeIntegration extends EventEmitter {
   private claudeProcess: ChildProcess | null = null;
   private isInitialized = false;
   private claudeExecutablePath: string | null = null;
-  private isMockMode = false;
 
   constructor(config: ClaudeControllerConfig) {
     super();
@@ -70,12 +69,13 @@ export class ClaudeIntegration extends EventEmitter {
       this.isInitialized = true;
       this.emit('initialized');
     } catch (error) {
-      // 開発環境ではClaudeが利用できない場合もモックモードで動作
-      console.warn('ClaudeCodeが利用できません。モックモードで動作します', error);
-      this.isMockMode = true;
-      this.isInitialized = true; // モックモードでも初期化済みとする
-      this.emit('initialized_mock_mode');
-      // エラーは上位に伝播しない（モックモードで継続）
+      console.error('ClaudeCode初期化エラー:', error);
+      // エラーを上位に伝播して、問題を明確にする
+      throw new ClaudeCodeError(
+        ClaudeErrorCode.INTERNAL_ERROR,
+        'ClaudeCode統合の初期化に失敗しました',
+        error instanceof Error ? error.message : String(error)
+      );
     }
   }
 
@@ -103,6 +103,7 @@ export class ClaudeIntegration extends EventEmitter {
 
     // 3. 一般的なパスを試す
     const commonPaths = [
+      '/home/happy_ryo/.volta/tools/image/node/22.5.1/bin/claude',  // 確実に存在するパス
       '/home/happy_ryo/.volta/bin/claude',
       `${process.env['HOME']}/.volta/bin/claude`,
       '/usr/local/bin/claude',
@@ -129,9 +130,11 @@ export class ClaudeIntegration extends EventEmitter {
    */
   private async isExecutable(path: string): Promise<boolean> {
     try {
-      await fs.access(path, fs.constants.X_OK);
+      await fs.access(path, fs.constants.F_OK); // まず存在確認
+      await fs.access(path, fs.constants.X_OK); // 実行権限確認
       return true;
-    } catch {
+    } catch (error) {
+      console.log(`Path ${path} is not accessible:`, error);
       return false;
     }
   }
@@ -142,8 +145,10 @@ export class ClaudeIntegration extends EventEmitter {
   private async checkClaudeCodeAvailability(): Promise<void> {
     // Claude実行ファイルを検索
     this.claudeExecutablePath = await this.findClaudeExecutable();
-    
-    console.log(`Checking Claude availability at: ${this.claudeExecutablePath}`);
+
+    console.log(
+      `Checking Claude availability at: ${this.claudeExecutablePath}`
+    );
 
     return new Promise((resolve, reject) => {
       const claudeProcess = spawn(this.claudeExecutablePath!, ['--version'], {
@@ -614,13 +619,8 @@ export class ClaudeIntegration extends EventEmitter {
     this.ensureInitialized();
 
     const startTime = Date.now();
-    
-    if (this.isMockMode) {
-      // モックモードでの応答
-      const content = this.generateMockResponse(prompt);
-      const duration = Date.now() - startTime;
-      return { content, duration };
-    }
+
+    // モックモードは使わない - 常に実際のClaudeを使う
 
     return new Promise((resolve, reject) => {
       // プロンプトを引数として渡す
@@ -718,19 +718,6 @@ export class ClaudeIntegration extends EventEmitter {
     }
   }
 
-  /**
-   * モック応答を生成
-   */
-  private generateMockResponse(prompt: string): string {
-    // プロンプトに基づいて簡単な応答を生成
-    if (prompt.toLowerCase().includes('hello')) {
-      return 'こんにちは！私はRenkei Systemの統合AIです。現在モックモードで動作しています。実際のClaudeCodeが利用可能になると、より高度なタスクを実行できるようになります。';
-    } else if (prompt.toLowerCase().includes('list') || prompt.toLowerCase().includes('files')) {
-      return 'モックモード：ファイル一覧\n- src/index.ts\n- package.json\n- README.md\n\n実際のClaudeCodeでは、指定されたディレクトリの実際のファイル一覧を取得できます。';
-    } else {
-      return `モックモード：「${prompt}」というリクエストを受け取りました。\n\n現在、開発環境のため実際のClaudeCodeは利用できませんが、システムは正常に動作しています。本番環境では、このリクエストに対して適切な処理を実行します。`;
-    }
-  }
 
   /**
    * リソースのクリーンアップ
