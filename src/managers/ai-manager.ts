@@ -154,7 +154,7 @@ export class AIManager extends EventEmitter {
 
 タスク記述: "${description}"
 
-以下の形式でJSON回答してください：
+重要：以下の形式の完全なJSONオブジェクトのみを返してください。説明文は不要です。必ず{で始まり}で終わる有効なJSONを返してください：
 {
   "intent": "主要な目的・意図",
   "entities": ["関連する技術・ファイル・システム"],
@@ -165,11 +165,20 @@ export class AIManager extends EventEmitter {
 `;
 
     const result = await this.claude.sendMessage(analysisPrompt);
-    
+
     console.log('Claude analysis response:', result.content);
 
     try {
-      const analysis = JSON.parse(result.content);
+      // 不完全なJSONを修正（{と}で囲まれていない場合）
+      let jsonContent = result.content.trim();
+      if (!jsonContent.startsWith('{')) {
+        jsonContent = '{' + jsonContent;
+      }
+      if (!jsonContent.endsWith('}')) {
+        jsonContent = jsonContent + '}';
+      }
+      
+      const analysis = JSON.parse(jsonContent);
       this.emit(AIManagerEvents.NATURAL_LANGUAGE_ANALYSIS_COMPLETED, analysis);
       return analysis;
     } catch (parseError) {
@@ -242,7 +251,7 @@ export class AIManager extends EventEmitter {
 `;
 
     const result = await this.claude.sendMessage(planningPrompt);
-    
+
     console.log('Claude planning response:', result.content);
 
     try {
