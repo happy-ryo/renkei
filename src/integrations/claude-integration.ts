@@ -623,8 +623,8 @@ export class ClaudeIntegration extends EventEmitter {
     // モックモードは使わない - 常に実際のClaudeを使う
 
     return new Promise((resolve, reject) => {
-      // ストリーミングJSONフォーマットで進捗を受け取る
-      const args = ['--print', '--output-format', 'stream-json'];
+      // シンプルにテキスト形式で応答を受け取る（stream-jsonは--verboseが必要で複雑になるため）
+      const args = ['--print', '--output-format', 'text'];
       let fullContent = '';
       let errorOutput = '';
 
@@ -641,27 +641,7 @@ export class ClaudeIntegration extends EventEmitter {
       });
 
       claudeProcess.stdout?.on('data', (data) => {
-        const lines = data.toString().split('\n').filter((line: string) => line.trim());
-        
-        for (const line of lines) {
-          try {
-            const json = JSON.parse(line);
-            
-            // ストリーミングイベントの処理
-            if (json.type === 'text') {
-              // テキストの差分を蓄積
-              fullContent += json.content || '';
-            } else if (json.type === 'final_text') {
-              // 最終的なテキスト
-              fullContent = json.content || fullContent;
-            } else if (json.type === 'tool_use') {
-              // ツール使用の通知（デバッグ用）
-              console.log(`Claude is using tool: ${json.name}`);
-            }
-          } catch (e) {
-            // JSON以外の出力は無視
-          }
-        }
+        fullContent += data.toString();
       });
 
       claudeProcess.stderr?.on('data', (data) => {
