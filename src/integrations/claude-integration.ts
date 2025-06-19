@@ -103,7 +103,7 @@ export class ClaudeIntegration extends EventEmitter {
 
     // 3. 一般的なパスを試す
     const commonPaths = [
-      '/home/happy_ryo/.volta/tools/image/node/22.5.1/bin/claude',  // 確実に存在するパス
+      '/home/happy_ryo/.volta/tools/image/node/22.5.1/bin/claude', // 確実に存在するパス
       '/home/happy_ryo/.volta/bin/claude',
       `${process.env['HOME']}/.volta/bin/claude`,
       '/usr/local/bin/claude',
@@ -623,8 +623,8 @@ export class ClaudeIntegration extends EventEmitter {
     // モックモードは使わない - 常に実際のClaudeを使う
 
     return new Promise((resolve, reject) => {
-      // プロンプトを引数として渡す
-      const args = ['--print', '--output-format', 'text', prompt];
+      // プロンプトは標準入力から渡す
+      const args = ['--print', '--output-format', 'text'];
       let output = '';
       let errorOutput = '';
 
@@ -632,7 +632,7 @@ export class ClaudeIntegration extends EventEmitter {
       const claudePath = this.claudeExecutablePath || 'claude';
 
       console.log(
-        `Executing Claude: ${claudePath} --print --output-format text [prompt]`
+        `Executing Claude: ${claudePath} --print --output-format text`
       );
 
       const claudeProcess = spawn(claudePath, args, {
@@ -685,22 +685,28 @@ export class ClaudeIntegration extends EventEmitter {
       // タイムアウト処理を追加
       const timeout = setTimeout(() => {
         if (!claudeProcess.killed) {
-          console.error('Claude process timeout after 30 seconds');
+          console.error('Claude process timeout after 60 seconds');
           claudeProcess.kill();
           reject(
             new ClaudeCodeError(
               ClaudeErrorCode.TIMEOUT,
               'Claude process timeout',
-              'Process did not complete within 30 seconds'
+              'Process did not complete within 60 seconds'
             )
           );
         }
-      }, 30000);
+      }, 60000); // 60秒に延長
 
       // プロセスが終了したらタイムアウトをクリア
       claudeProcess.on('exit', () => {
         clearTimeout(timeout);
       });
+      
+      // プロンプトを標準入力に送信
+      if (claudeProcess.stdin) {
+        claudeProcess.stdin.write(prompt);
+        claudeProcess.stdin.end();
+      }
     });
   }
 
@@ -717,7 +723,6 @@ export class ClaudeIntegration extends EventEmitter {
       await this.cancelTask(taskId);
     }
   }
-
 
   /**
    * リソースのクリーンアップ
