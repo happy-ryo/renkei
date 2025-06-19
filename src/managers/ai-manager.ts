@@ -182,9 +182,11 @@ export class AIManager extends EventEmitter {
     try {
       // JSON部分を抽出
       let jsonContent = result.content || '';
-      
+
       // 方法1: マークダウンのコードブロック
-      const codeBlockMatch = jsonContent.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+      const codeBlockMatch = jsonContent.match(
+        /```(?:json)?\s*([\s\S]*?)\s*```/
+      );
       if (codeBlockMatch && codeBlockMatch[1]) {
         jsonContent = codeBlockMatch[1].trim();
       } else {
@@ -274,9 +276,11 @@ export class AIManager extends EventEmitter {
     try {
       // JSON部分を抽出
       let jsonContent = result.content || '';
-      
+
       // 方法1: マークダウンのコードブロック
-      const codeBlockMatch = jsonContent.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+      const codeBlockMatch = jsonContent.match(
+        /```(?:json)?\s*([\s\S]*?)\s*```/
+      );
       if (codeBlockMatch && codeBlockMatch[1]) {
         jsonContent = codeBlockMatch[1].trim();
       } else {
@@ -336,9 +340,11 @@ export class AIManager extends EventEmitter {
     try {
       // JSON部分を抽出
       let jsonContent = result.content || '';
-      
+
       // 方法1: マークダウンのコードブロック
-      const codeBlockMatch = jsonContent.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+      const codeBlockMatch = jsonContent.match(
+        /```(?:json)?\s*([\s\S]*?)\s*```/
+      );
       if (codeBlockMatch && codeBlockMatch[1]) {
         jsonContent = codeBlockMatch[1].trim();
       } else {
@@ -458,7 +464,7 @@ export class AIManager extends EventEmitter {
    */
   private async executeStep(step: any): Promise<any> {
     const instruction = this.generateClaudeInstruction(step);
-    
+
     // outputペインに実行開始を表示
     if (this.tmuxManager && this.outputPaneId) {
       await this.tmuxManager.appendToPaneContent(

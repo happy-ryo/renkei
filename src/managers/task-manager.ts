@@ -428,7 +428,7 @@ export class TaskManager extends EventEmitter {
 
         // Claude Codeでステップを実行
         const sessionId = await this.claudeIntegration.createSession();
-        
+
         // outputペインに実行開始を表示
         if (this.tmuxManager && this.outputPaneId) {
           await this.tmuxManager.appendToPaneContent(
@@ -462,7 +462,7 @@ export class TaskManager extends EventEmitter {
                 `\n✅ ステップ完了\n${'─'.repeat(50)}\n`
               );
             }
-          }
+          },
         };
 
         const taskId = await this.claudeIntegration.executeTask(

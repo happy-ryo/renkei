@@ -103,13 +103,17 @@ export class ClaudeIntegration extends EventEmitter {
 
     // 3. 一般的なパスを試す
     const commonPaths = [
-      '/home/happy_ryo/.volta/tools/image/node/22.5.1/bin/claude', // 確実に存在するパス
-      '/home/happy_ryo/.volta/bin/claude',
+      // Voltaの一般的なパス
       `${process.env['HOME']}/.volta/bin/claude`,
+      // システム標準のパス
       '/usr/local/bin/claude',
       '/usr/bin/claude',
+      '/opt/homebrew/bin/claude',
+      // ユーザーローカルのパス
       `${process.env['HOME']}/.local/bin/claude`,
       `${process.env['HOME']}/bin/claude`,
+      // npmグローバルインストール
+      `${process.env['HOME']}/.npm-global/bin/claude`,
     ];
 
     for (const path of commonPaths) {
@@ -386,7 +390,7 @@ export class ClaudeIntegration extends EventEmitter {
 
       // 保存されたclaudeパスを使用
       const claudePath = this.claudeExecutablePath || 'claude';
-      
+
       this.claudeProcess = spawn(claudePath, args, {
         cwd: session.context.workingDirectory,
         stdio: 'pipe',

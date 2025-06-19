@@ -249,7 +249,7 @@ export class TmuxManager extends EventEmitter {
       // より簡単な方法：printfコマンドを使用
       // printfは改行を自動的に処理し、エスケープもより単純
       const lines = content.split('\n');
-      
+
       for (const line of lines) {
         if (line) {
           // printfコマンドを使用して、より安全に文字列を出力

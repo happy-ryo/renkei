@@ -101,6 +101,31 @@ Configuration hierarchy:
 2. Profile-specific settings
 3. User overrides via CLI flags
 
+### ClaudeCode Executable Path
+
+If ClaudeCode is not found automatically, you can specify the path in your settings:
+
+1. Copy the default settings to create user settings:
+   ```bash
+   cp config/default-settings.json data/user-settings.json
+   ```
+
+2. Edit `data/user-settings.json` and set the `claude.executablePath`:
+   ```json
+   {
+     "claude": {
+       "executablePath": "/path/to/your/claude"
+     }
+   }
+   ```
+
+Common paths:
+- Volta: `~/.volta/bin/claude`
+- npm global: `/usr/local/bin/claude`
+- Homebrew: `/opt/homebrew/bin/claude`
+
+To find your Claude path, run: `which claude`
+
 ## Key Dependencies
 
 - `@anthropic-ai/claude-code`: Claude Code SDK integration

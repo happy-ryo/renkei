@@ -19,6 +19,7 @@
     "timeout": 300000,
     "outputFormat": "json",
     "executablePath": null,
+    "executablePathComment": "ClaudeCodeの実行パスを指定できます。例: '/home/user/.volta/bin/claude' または '/usr/local/bin/claude'",
     "allowedTools": [
       "Write",
       "Read",
