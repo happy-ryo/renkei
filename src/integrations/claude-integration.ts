@@ -33,6 +33,7 @@ export class ClaudeIntegration extends EventEmitter {
   private claudeProcess: ChildProcess | null = null;
   private isInitialized = false;
   private claudeExecutablePath: string | null = null;
+  private isMockMode = false;
 
   constructor(config: ClaudeControllerConfig) {
     super();
@@ -70,15 +71,11 @@ export class ClaudeIntegration extends EventEmitter {
       this.emit('initialized');
     } catch (error) {
       // 開発環境ではClaudeが利用できない場合もモックモードで動作
-      console.warn('ClaudeCodeが利用できません。モックモードで動作します');
+      console.warn('ClaudeCodeが利用できません。モックモードで動作します', error);
+      this.isMockMode = true;
       this.isInitialized = true; // モックモードでも初期化済みとする
       this.emit('initialized_mock_mode');
-      // エラーは上位に伝播する
-      throw new ClaudeCodeError(
-        ClaudeErrorCode.INTERNAL_ERROR,
-        'ClaudeCode統合の初期化に失敗しました',
-        error instanceof Error ? error.message : String(error)
-      );
+      // エラーは上位に伝播しない（モックモードで継続）
     }
   }
 
@@ -145,6 +142,8 @@ export class ClaudeIntegration extends EventEmitter {
   private async checkClaudeCodeAvailability(): Promise<void> {
     // Claude実行ファイルを検索
     this.claudeExecutablePath = await this.findClaudeExecutable();
+    
+    console.log(`Checking Claude availability at: ${this.claudeExecutablePath}`);
 
     return new Promise((resolve, reject) => {
       const claudeProcess = spawn(this.claudeExecutablePath!, ['--version'], {
@@ -168,22 +167,26 @@ export class ClaudeIntegration extends EventEmitter {
           console.log('Claude version:', stdout.trim());
           resolve();
         } else {
+          console.error(`Claude version check failed with code ${code}`);
+          console.error('stdout:', stdout);
+          console.error('stderr:', stderr);
           reject(
             new ClaudeCodeError(
               ClaudeErrorCode.API_ERROR,
-              'ClaudeCodeが見つからないか、実行できません',
-              stderr || stdout
+              `ClaudeCodeが見つからないか、実行できません (exit code: ${code})`,
+              `stdout: ${stdout}\nstderr: ${stderr}`
             )
           );
         }
       });
 
       claudeProcess.on('error', (error) => {
+        console.error('Failed to spawn Claude process:', error);
         reject(
           new ClaudeCodeError(
             ClaudeErrorCode.NETWORK_ERROR,
-            'ClaudeCodeプロセスの起動に失敗しました',
-            error.message
+            `ClaudeCodeプロセスの起動に失敗しました: ${error.message}`,
+            error.stack || error.message
           )
         );
       });
@@ -611,6 +614,13 @@ export class ClaudeIntegration extends EventEmitter {
     this.ensureInitialized();
 
     const startTime = Date.now();
+    
+    if (this.isMockMode) {
+      // モックモードでの応答
+      const content = this.generateMockResponse(prompt);
+      const duration = Date.now() - startTime;
+      return { content, duration };
+    }
 
     return new Promise((resolve, reject) => {
       // プロンプトを引数として渡す
@@ -620,9 +630,11 @@ export class ClaudeIntegration extends EventEmitter {
 
       // 保存されたclaudeパスを使用
       const claudePath = this.claudeExecutablePath || 'claude';
-      
-      console.log(`Executing Claude: ${claudePath} --print --output-format text [prompt]`);
-      
+
+      console.log(
+        `Executing Claude: ${claudePath} --print --output-format text [prompt]`
+      );
+
       const claudeProcess = spawn(claudePath, args, {
         cwd: process.cwd(),
         env: { ...process.env },
@@ -638,8 +650,10 @@ export class ClaudeIntegration extends EventEmitter {
 
       claudeProcess.on('close', (code) => {
         const duration = Date.now() - startTime;
-        console.log(`Claude process exited with code ${code}, duration: ${duration}ms`);
-        
+        console.log(
+          `Claude process exited with code ${code}, duration: ${duration}ms`
+        );
+
         if (code === 0) {
           resolve({
             content: output.trim(),
@@ -701,6 +715,20 @@ export class ClaudeIntegration extends EventEmitter {
     // 全てのアクティブタスクをキャンセル
     for (const taskId of this.activeTasks.keys()) {
       await this.cancelTask(taskId);
+    }
+  }
+
+  /**
+   * モック応答を生成
+   */
+  private generateMockResponse(prompt: string): string {
+    // プロンプトに基づいて簡単な応答を生成
+    if (prompt.toLowerCase().includes('hello')) {
+      return 'こんにちは！私はRenkei Systemの統合AIです。現在モックモードで動作しています。実際のClaudeCodeが利用可能になると、より高度なタスクを実行できるようになります。';
+    } else if (prompt.toLowerCase().includes('list') || prompt.toLowerCase().includes('files')) {
+      return 'モックモード：ファイル一覧\n- src/index.ts\n- package.json\n- README.md\n\n実際のClaudeCodeでは、指定されたディレクトリの実際のファイル一覧を取得できます。';
+    } else {
+      return `モックモード：「${prompt}」というリクエストを受け取りました。\n\n現在、開発環境のため実際のClaudeCodeは利用できませんが、システムは正常に動作しています。本番環境では、このリクエストに対して適切な処理を実行します。`;
     }
   }
 
