@@ -9,7 +9,7 @@ import {
   ChatMessage,
   ChatSessionState,
   ChatContext,
-  ChatMetrics
+  ChatMetrics,
 } from '../interfaces/chat-types';
 import { TaskRequest, TaskResult } from '../interfaces/types';
 import { v4 as uuidv4 } from 'uuid';
@@ -20,11 +20,14 @@ export class ChatManager extends EventEmitter {
   private messageHistory: Map<string, ChatMessage[]> = new Map();
   private metrics: ChatMetrics;
   private aiManagerConnected: boolean = false;
-  private pendingRequests: Map<string, { 
-    messageId: string; 
-    resolve: (result: TaskResult) => void;
-    reject: (error: Error) => void;
-  }> = new Map();
+  private pendingRequests: Map<
+    string,
+    {
+      messageId: string;
+      resolve: (result: TaskResult) => void;
+      reject: (error: Error) => void;
+    }
+  > = new Map();
 
   constructor() {
     super();
@@ -35,7 +38,7 @@ export class ChatManager extends EventEmitter {
       totalTokensUsed: 0,
       errorRate: 0,
       sessionDuration: 0,
-      commandsExecuted: {} as any
+      commandsExecuted: {} as any,
     };
   }
 
@@ -55,13 +58,13 @@ export class ChatManager extends EventEmitter {
         workingDirectory: process.cwd(),
         recentFiles: [],
         activeCommands: [],
-        ...context
-      }
+        ...context,
+      },
     };
 
     this.sessions.set(sessionId, session);
     this.messageHistory.set(sessionId, []);
-    
+
     this.emit('session_created', session);
     return session;
   }
@@ -69,7 +72,10 @@ export class ChatManager extends EventEmitter {
   /**
    * メッセージをAI Managerに送信
    */
-  async sendToAIManager(sessionId: string, message: ChatMessage): Promise<TaskResult> {
+  async sendToAIManager(
+    sessionId: string,
+    message: ChatMessage
+  ): Promise<TaskResult> {
     const session = this.sessions.get(sessionId);
     if (!session) {
       throw new Error(`Session not found: ${sessionId}`);
@@ -80,15 +86,17 @@ export class ChatManager extends EventEmitter {
       id: uuidv4(),
       userPrompt: message.content,
       description: `Chat message from session ${sessionId}`,
-      workingDirectory: session.currentContext?.workingDirectory || process.cwd(),
+      workingDirectory:
+        session.currentContext?.workingDirectory || process.cwd(),
       priority: 'medium',
       timestamp: new Date(),
       context: {
-        workingDirectory: session.currentContext?.workingDirectory || process.cwd(),
+        workingDirectory:
+          session.currentContext?.workingDirectory || process.cwd(),
         previousTasks: [],
         sessionId: session.sessionId,
-        files: session.currentContext?.recentFiles || []
-      }
+        files: session.currentContext?.recentFiles || [],
+      },
     };
 
     // メトリクス更新
@@ -98,11 +106,11 @@ export class ChatManager extends EventEmitter {
     try {
       // AI Managerにタスクを送信
       const result = await this.submitTaskToAIManager(taskRequest);
-      
+
       // 応答時間を記録
       const responseTime = Date.now() - startTime;
       this.updateAverageResponseTime(responseTime);
-      
+
       // トークン使用量を記録
       if (result.metrics.tokensUsed) {
         this.metrics.totalTokensUsed += result.metrics.tokensUsed;
@@ -111,7 +119,9 @@ export class ChatManager extends EventEmitter {
       return result;
     } catch (error) {
       // エラー率を更新
-      this.metrics.errorRate = (this.metrics.errorRate * (this.metrics.totalMessages - 1) + 1) / this.metrics.totalMessages;
+      this.metrics.errorRate =
+        (this.metrics.errorRate * (this.metrics.totalMessages - 1) + 1) /
+        this.metrics.totalMessages;
       throw error;
     }
   }
@@ -119,15 +129,17 @@ export class ChatManager extends EventEmitter {
   /**
    * AI Managerにタスクを送信（実際の通信はAIBridgeで実装）
    */
-  private async submitTaskToAIManager(taskRequest: TaskRequest): Promise<TaskResult> {
+  private async submitTaskToAIManager(
+    taskRequest: TaskRequest
+  ): Promise<TaskResult> {
     return new Promise((resolve, reject) => {
       const requestId = taskRequest.id;
-      
+
       // ペンディングリクエストとして保存
       this.pendingRequests.set(requestId, {
         messageId: taskRequest.id,
         resolve,
-        reject
+        reject,
       });
 
       // AIBridgeイベントを発行
@@ -195,9 +207,12 @@ export class ChatManager extends EventEmitter {
     if (session && session.currentContext) {
       session.currentContext = {
         ...session.currentContext,
-        ...context
+        ...context,
       };
-      this.emit('context_updated', { sessionId, context: session.currentContext });
+      this.emit('context_updated', {
+        sessionId,
+        context: session.currentContext,
+      });
     }
   }
 
@@ -208,14 +223,14 @@ export class ChatManager extends EventEmitter {
     const session = this.sessions.get(sessionId);
     if (session) {
       session.isActive = false;
-      
+
       // セッション期間を計算
       const duration = Date.now() - session.startTime.getTime();
       this.metrics.sessionDuration += duration;
 
       // 履歴を保存
       this.saveSessionHistory(sessionId);
-      
+
       this.emit('session_ended', session);
     }
   }
@@ -226,7 +241,7 @@ export class ChatManager extends EventEmitter {
   private saveSessionHistory(sessionId: string): void {
     const history = this.messageHistory.get(sessionId);
     const session = this.sessions.get(sessionId);
-    
+
     if (!history || !session) return;
 
     const historyDir = path.join(process.cwd(), 'data', 'chat-history');
@@ -240,7 +255,7 @@ export class ChatManager extends EventEmitter {
     const data = {
       session,
       messages: history,
-      metrics: this.getMetrics()
+      metrics: this.getMetrics(),
     };
 
     fs.writeFileSync(filepath, JSON.stringify(data, null, 2));
@@ -257,7 +272,9 @@ export class ChatManager extends EventEmitter {
    * 平均応答時間を更新
    */
   private updateAverageResponseTime(newTime: number): void {
-    const total = this.metrics.averageResponseTime * (this.metrics.totalMessages - 1) + newTime;
+    const total =
+      this.metrics.averageResponseTime * (this.metrics.totalMessages - 1) +
+      newTime;
     this.metrics.averageResponseTime = total / this.metrics.totalMessages;
   }
 

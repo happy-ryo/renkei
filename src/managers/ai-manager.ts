@@ -86,7 +86,7 @@ export class AIManager extends EventEmitter {
     this.evaluator = evaluator;
     // configは将来的に使用予定のため保持
     void config;
-    
+
     // チャットブリッジとの接続を設定
     this.setupChatBridge();
   }
@@ -557,7 +557,7 @@ ${step.content}`;
       fs.mkdirSync(socketDir, { recursive: true });
     }
     this.bridgeSocketPath = path.join(socketDir, 'ai-manager.sock');
-    
+
     // AI Managerがソケットサーバーを起動
     this.startBridgeServer();
   }
@@ -596,7 +596,9 @@ ${step.content}`;
 
     // リスニング開始
     this.bridgeServer.listen(this.bridgeSocketPath!, () => {
-      console.log(`AI Manager bridge server listening on ${this.bridgeSocketPath}`);
+      console.log(
+        `AI Manager bridge server listening on ${this.bridgeSocketPath}`
+      );
     });
 
     this.bridgeServer.on('error', (error) => {
@@ -609,24 +611,30 @@ ${step.content}`;
    */
   private handleBridgeMessage(data: Buffer, socket: net.Socket): void {
     try {
-      const messages = data.toString().split('\n').filter(msg => msg.trim());
-      
+      const messages = data
+        .toString()
+        .split('\n')
+        .filter((msg) => msg.trim());
+
       for (const msgStr of messages) {
         const message: BridgeMessage = JSON.parse(msgStr);
-        
+
         switch (message.type) {
           case 'task_request':
             this.handleChatTaskRequest(message.id, message.payload, socket);
             break;
-          
+
           case 'heartbeat':
             // ハートビート応答
-            this.sendBridgeMessage({
-              id: message.id,
-              type: 'heartbeat',
-              payload: {},
-              timestamp: new Date()
-            }, socket);
+            this.sendBridgeMessage(
+              {
+                id: message.id,
+                type: 'heartbeat',
+                payload: {},
+                timestamp: new Date(),
+              },
+              socket
+            );
             break;
         }
       }
@@ -638,13 +646,17 @@ ${step.content}`;
   /**
    * チャットタスクリクエストを処理
    */
-  private async handleChatTaskRequest(messageId: string, request: BaseTaskRequest, socket: net.Socket): Promise<void> {
+  private async handleChatTaskRequest(
+    messageId: string,
+    request: BaseTaskRequest,
+    socket: net.Socket
+  ): Promise<void> {
     try {
       this.chatRequestQueue.set(messageId, request);
-      
+
       // チャットリクエストを簡潔に処理
       const response = await this.processChatRequest(request);
-      
+
       const result: TaskResult = {
         id: request.id,
         status: 'success',
@@ -655,30 +667,36 @@ ${step.content}`;
         metrics: {
           executionTime: 100,
           apiCalls: 1,
-          tokensUsed: 50
+          tokensUsed: 50,
         },
-        timestamp: new Date()
+        timestamp: new Date(),
       };
-      
-      this.sendBridgeMessage({
-        id: messageId,
-        type: 'task_result',
-        payload: result,
-        timestamp: new Date()
-      }, socket);
-      
+
+      this.sendBridgeMessage(
+        {
+          id: messageId,
+          type: 'task_result',
+          payload: result,
+          timestamp: new Date(),
+        },
+        socket
+      );
+
       this.chatRequestQueue.delete(messageId);
     } catch (error) {
-      this.sendBridgeMessage({
-        id: messageId,
-        type: 'task_error',
-        payload: {
-          taskId: request.id,
-          error: error instanceof Error ? error.message : 'Unknown error'
+      this.sendBridgeMessage(
+        {
+          id: messageId,
+          type: 'task_error',
+          payload: {
+            taskId: request.id,
+            error: error instanceof Error ? error.message : 'Unknown error',
+          },
+          timestamp: new Date(),
         },
-        timestamp: new Date()
-      }, socket);
-      
+        socket
+      );
+
       this.chatRequestQueue.delete(messageId);
     }
   }
@@ -713,7 +731,7 @@ ${step.content}`;
     } catch (error) {
       // 開発環境用のフォールバック
       console.log('Claudeが利用できないため、モック応答を返します');
-      
+
       // 空の入力チェック（モックモードでも）
       const userInput = request.userPrompt.trim();
       if (!userInput || userInput === '') {
@@ -722,20 +740,24 @@ ${step.content}`;
 
       // シンプルなモック応答
       const mockResponses: { [key: string]: string } = {
-        'こんにちは': 'こんにちは！Renkei Systemの統括AIです。システムは正常に動作しています。どのようなお手伝いができますか？',
-        'hello': 'Hello! I\'m the Renkei System AI assistant. How can I help you today?',
-        'システム': 'はい、システムは正常に動作しています。\n\n現在の状態：\n- チャットインターフェース: アクティブ\n- AI Manager: 稼働中\n- ワーカープロセス: 待機中\n\nタスクの実行やシステムの操作についてお手伝いできます。',
-        'ヘルプ': '利用可能なコマンド：\n- /help: ヘルプを表示\n- /clear: 画面をクリア\n- /history: チャット履歴を表示\n- /exit: チャットを終了\n\nその他、自然言語でタスクを依頼できます。',
-        '動い': 'はい、正常に動作しています！チャットインターフェース、AI Manager、ClaudeCodeとの統合すべてが機能しています。'
+        こんにちは:
+          'こんにちは！Renkei Systemの統括AIです。システムは正常に動作しています。どのようなお手伝いができますか？',
+        hello:
+          "Hello! I'm the Renkei System AI assistant. How can I help you today?",
+        システム:
+          'はい、システムは正常に動作しています。\n\n現在の状態：\n- チャットインターフェース: アクティブ\n- AI Manager: 稼働中\n- ワーカープロセス: 待機中\n\nタスクの実行やシステムの操作についてお手伝いできます。',
+        ヘルプ:
+          '利用可能なコマンド：\n- /help: ヘルプを表示\n- /clear: 画面をクリア\n- /history: チャット履歴を表示\n- /exit: チャットを終了\n\nその他、自然言語でタスクを依頼できます。',
+        動い: 'はい、正常に動作しています！チャットインターフェース、AI Manager、ClaudeCodeとの統合すべてが機能しています。',
       };
-      
+
       // キーワードマッチング
       for (const [keyword, response] of Object.entries(mockResponses)) {
         if (userInput.toLowerCase().includes(keyword)) {
           return response;
         }
       }
-      
+
       // デフォルト応答
       return `ご質問ありがとうございます。「${userInput}」について承知しました。\n\n現在、開発環境で動作しているため、完全なAI機能は利用できませんが、基本的なチャット機能は正常に動作しています。`;
     }
@@ -755,7 +777,7 @@ ${step.content}`;
    */
   private closeChatBridge(): void {
     // すべてのクライアントを切断
-    this.bridgeClients.forEach(client => {
+    this.bridgeClients.forEach((client) => {
       client.end();
     });
     this.bridgeClients.clear();

@@ -28,7 +28,7 @@ export class AIBridge extends EventEmitter {
   constructor(chatManager: ChatManager) {
     super();
     this.chatManager = chatManager;
-    
+
     // Unixソケットのパスを設定
     const socketDir = path.join(process.cwd(), 'data', 'sockets');
     if (!fs.existsSync(socketDir)) {
@@ -46,7 +46,7 @@ export class AIBridge extends EventEmitter {
   async start(): Promise<void> {
     // AIBridgeはクライアントとして動作するので、サーバーは不要
     console.log('AI Bridge started as client mode');
-    
+
     // AI Managerへの接続を試みる
     await this.connectToAIManager();
   }
@@ -73,8 +73,13 @@ export class AIBridge extends EventEmitter {
    */
   async connectToAIManager(): Promise<void> {
     // AI Managerのソケットパスを探す
-    const aiManagerSocketPath = path.join(process.cwd(), 'data', 'sockets', 'ai-manager.sock');
-    
+    const aiManagerSocketPath = path.join(
+      process.cwd(),
+      'data',
+      'sockets',
+      'ai-manager.sock'
+    );
+
     if (!fs.existsSync(aiManagerSocketPath)) {
       // ソケットが存在しない場合は、後で再試行
       this.scheduleReconnect();
@@ -118,30 +123,32 @@ export class AIBridge extends EventEmitter {
     });
   }
 
-
   /**
    * AI Managerからのメッセージを処理
    */
   private handleAIManagerMessage(data: Buffer): void {
     try {
-      const messages = data.toString().split('\n').filter(msg => msg.trim());
-      
+      const messages = data
+        .toString()
+        .split('\n')
+        .filter((msg) => msg.trim());
+
       for (const msgStr of messages) {
         const message: BridgeMessage = JSON.parse(msgStr);
-        
+
         switch (message.type) {
           case 'task_result':
             this.handleTaskResult(message.payload);
             break;
-          
+
           case 'task_error':
             this.handleTaskError(message.payload);
             break;
-          
+
           case 'heartbeat':
             // ハートビート応答
             break;
-          
+
           default:
             console.warn('Unknown AI Manager message type:', message.type);
         }
@@ -159,7 +166,7 @@ export class AIBridge extends EventEmitter {
       id: uuidv4(),
       type: 'task_request',
       payload: taskRequest,
-      timestamp: new Date()
+      timestamp: new Date(),
     };
 
     if (this.isConnected && this.client) {
@@ -167,7 +174,7 @@ export class AIBridge extends EventEmitter {
     } else {
       // 接続されていない場合はキューに追加
       this.messageQueue.push(message);
-      
+
       // 接続を試みる
       if (!this.reconnectTimer) {
         this.connectToAIManager();
@@ -239,7 +246,7 @@ export class AIBridge extends EventEmitter {
           id: uuidv4(),
           type: 'heartbeat',
           payload: {},
-          timestamp: new Date()
+          timestamp: new Date(),
         };
         this.client.write(JSON.stringify(heartbeat) + '\n');
       }
@@ -250,7 +257,9 @@ export class AIBridge extends EventEmitter {
 /**
  * シンプルなブリッジの作成（既存のAI Managerとの互換性のため）
  */
-export async function createSimpleAIBridge(chatManager: ChatManager): Promise<void> {
+export async function createSimpleAIBridge(
+  chatManager: ChatManager
+): Promise<void> {
   // AI Managerとの通信用のファイルベースのブリッジ
   const bridgeDir = path.join(process.cwd(), 'data', 'bridge');
   if (!fs.existsSync(bridgeDir)) {
@@ -264,13 +273,13 @@ export async function createSimpleAIBridge(chatManager: ChatManager): Promise<vo
   chatManager.on('task_submit', async (taskRequest: TaskRequest) => {
     try {
       // リクエストをファイルに書き込む
-      const requests = fs.existsSync(requestFile) 
+      const requests = fs.existsSync(requestFile)
         ? JSON.parse(fs.readFileSync(requestFile, 'utf8'))
         : [];
-      
+
       requests.push({
         ...taskRequest,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       });
 
       fs.writeFileSync(requestFile, JSON.stringify(requests, null, 2));
@@ -287,14 +296,13 @@ export async function createSimpleAIBridge(chatManager: ChatManager): Promise<vo
           metrics: {
             executionTime: 1000,
             apiCalls: 1,
-            tokensUsed: 50
+            tokensUsed: 50,
           },
-          timestamp: new Date()
+          timestamp: new Date(),
         };
 
         chatManager.handleAIManagerResult(taskRequest.id, result);
       }, 1000);
-
     } catch (error) {
       chatManager.handleAIManagerError(taskRequest.id, error as Error);
     }
