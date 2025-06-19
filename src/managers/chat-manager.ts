@@ -145,13 +145,13 @@ export class ChatManager extends EventEmitter {
       // AIBridgeイベントを発行
       this.emit('task_submit', taskRequest);
 
-      // タイムアウト設定
+      // タイムアウト設定（ClaudeCodeの実行時間に合わせて20分に設定）
       setTimeout(() => {
         if (this.pendingRequests.has(requestId)) {
           this.pendingRequests.delete(requestId);
           reject(new Error('Task submission timeout'));
         }
-      }, 30000); // 30秒のタイムアウト
+      }, 1200000); // 20分のタイムアウト（ClaudeCodeと同じ）
     });
   }
 
