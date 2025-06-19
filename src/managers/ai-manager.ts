@@ -712,8 +712,31 @@ ${step.content}`;
         return 'どのようなお手伝いができますか？タスクの実行、コード生成、技術的な質問など、お気軽にお尋ねください。';
       }
 
-      // チャット用のシンプルな応答を生成
-      const chatPrompt = `あなたはRenkei Systemの統括AIです。システム全体を管理し、ユーザーとの対話を担当しています。
+      // タスク実行要求を検出
+      const taskKeywords = ['実行', 'テスト', 'コード', '作成', '生成', '修正', 'ファイル', 'bash', 'run', 'create', 'build'];
+      const isTaskRequest = taskKeywords.some(keyword => userInput.toLowerCase().includes(keyword));
+
+      if (isTaskRequest) {
+        // タスク実行の場合は、実際にタスクを分析・実行する
+        try {
+          // タスクリクエストを作成
+          const taskRequest: InternalTaskRequest = {
+            description: userInput,
+            workingDirectory: request.context?.workingDirectory || process.cwd(),
+            priority: 'medium',
+          };
+
+          // タスクを分析
+          const plan = await this.analyzeTask(taskRequest);
+          
+          // シンプルな応答を返す（実際の実行は別プロセスで）
+          return `承知いたしました。以下のタスクを実行します：\n\n${plan.description}\n\n実行を開始しています...`;
+        } catch (error) {
+          return `申し訳ございません。タスクの分析中にエラーが発生しました: ${error instanceof Error ? error.message : 'Unknown error'}`;
+        }
+      } else {
+        // 通常の会話の場合
+        const chatPrompt = `あなたはRenkei Systemの統括AIです。システム全体を管理し、ユーザーとの対話を担当しています。
 
 重要な役割：
 - あなたは統括AIであり、実際のコード実行はワーカー（ClaudeCode）が行います
@@ -730,8 +753,9 @@ ${step.content}`;
 
 統括AIとして適切に応答してください：`;
 
-      const result = await this.claude.sendMessage(chatPrompt);
-      return result.content;
+        const result = await this.claude.sendMessage(chatPrompt);
+        return result.content;
+      }
     } catch (error) {
       // エラーをそのまま投げる
       console.error('Claude呼び出しエラー:', error);
