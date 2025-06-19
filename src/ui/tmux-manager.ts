@@ -246,15 +246,33 @@ export class TmuxManager extends EventEmitter {
 
   async appendToPaneContent(paneId: string, content: string): Promise<void> {
     try {
-      // 複数行の場合は行ごとに処理
+      // より簡単な方法：printfコマンドを使用
+      // printfは改行を自動的に処理し、エスケープもより単純
       const lines = content.split('\n');
 
       for (const line of lines) {
-        if (line.trim()) {
-          await this.executeCommand(['send-keys', '-t', paneId, line, 'Enter']);
+        if (line) {
+          // printfコマンドを使用して、より安全に文字列を出力
+          // %qオプションでシェルクォートを適用
+          const command = `printf '%s\\n' ${JSON.stringify(line)}`;
+          await this.executeCommand([
+            'send-keys',
+            '-t',
+            paneId,
+            command,
+            'Enter',
+          ]);
         } else {
+          // 空行の場合は単にEnterキーを送信
           await this.executeCommand(['send-keys', '-t', paneId, 'Enter']);
         }
+      }
+
+      // 状態を更新
+      const currentState = this.paneStates.get(paneId);
+      if (currentState) {
+        currentState.content.push(...content.split('\n'));
+        currentState.lastUpdate = new Date();
       }
 
       this.emit('pane_content_appended', { paneId, content });

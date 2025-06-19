@@ -1,0 +1,191 @@
+#!/usr/bin/env node
+
+/**
+ * Renkei System - タスク実行スクリプト v2
+ * tmuxのoutputペインにClaudeCodeの実行結果を表示する新実装
+ */
+
+const { RenkeiSystem } = require('../dist/index.js');
+const { execSync } = require('child_process');
+
+// Chalk v5はESMなので、CommonJSで簡易的に色付けを実装
+const chalk = {
+  blue: (text) => `\x1b[34m${text}\x1b[0m`,
+  green: (text) => `\x1b[32m${text}\x1b[0m`,
+  yellow: (text) => `\x1b[33m${text}\x1b[0m`,
+  red: (text) => `\x1b[31m${text}\x1b[0m`,
+  gray: (text) => `\x1b[90m${text}\x1b[0m`
+};
+
+// Bold versions
+chalk.blue.bold = (text) => `\x1b[1m\x1b[34m${text}\x1b[0m`;
+chalk.green.bold = (text) => `\x1b[1m\x1b[32m${text}\x1b[0m`;
+chalk.red.bold = (text) => `\x1b[1m\x1b[31m${text}\x1b[0m`;
+
+// tmuxペインIDを取得
+function getTmuxPaneIds() {
+  try {
+    // outputペインのIDを取得（タイトルから識別）
+    const panes = execSync('tmux list-panes -t renkei -F "#{pane_id}:#{pane_title}"', { encoding: 'utf8' });
+    const paneLines = panes.trim().split('\n');
+    
+    let outputPaneId = null;
+    let mainPaneId = null;
+    
+    for (const line of paneLines) {
+      const [id, title] = line.split(':');
+      if (title && title.includes('Output')) {
+        outputPaneId = id;
+      }
+      if (title && title.includes('Renkei Main')) {
+        mainPaneId = id;
+      }
+    }
+    
+    return { outputPaneId, mainPaneId };
+  } catch (error) {
+    console.error(chalk.yellow('⚠️  tmuxペインの取得に失敗しました'));
+    return { outputPaneId: null, mainPaneId: null };
+  }
+}
+
+// コマンドライン引数の解析
+function parseArguments() {
+  const args = process.argv.slice(2);
+  
+  if (args.length === 0) {
+    showHelp();
+    process.exit(1);
+  }
+
+  const command = args[0];
+  const taskDescription = args.slice(1).join(' ');
+
+  return { command, taskDescription };
+}
+
+// ヘルプ表示
+function showHelp() {
+  console.log(chalk.blue.bold('🤖 Renkei Task v2 - AI指示ツール'));
+  console.log('');
+  console.log('使用方法:');
+  console.log('  scripts/renkei-task-v2 <指示内容>');
+  console.log('');
+  console.log('例:');
+  console.log('  scripts/renkei-task-v2 "READMEファイルを作成して"');
+  console.log('  scripts/renkei-task-v2 "package.jsonを確認してください"');
+  console.log('  scripts/renkei-task-v2 "テストファイルを作成してください"');
+  console.log('');
+  console.log('特別なコマンド:');
+  console.log('  scripts/renkei-task-v2 status    - システム状態を表示');
+  console.log('  scripts/renkei-task-v2 help      - このヘルプを表示');
+}
+
+// システム状態の表示
+async function showStatus() {
+  try {
+    console.log(chalk.blue.bold('📊 Renkei System 状態確認'));
+    console.log('');
+    
+    // tmuxセッションの確認
+    try {
+      execSync('tmux has-session -t renkei', { stdio: 'pipe' });
+      console.log(chalk.green('✅ tmux session "renkei" - 実行中'));
+      
+      // ペイン情報の取得
+      const { outputPaneId, mainPaneId } = getTmuxPaneIds();
+      if (outputPaneId) {
+        console.log(chalk.green(`✅ Output pane: ${outputPaneId}`));
+      }
+      if (mainPaneId) {
+        console.log(chalk.green(`✅ Main pane: ${mainPaneId}`));
+      }
+      
+    } catch (error) {
+      console.log(chalk.red('❌ tmux session "renkei" - 停止中'));
+      console.log(chalk.yellow('💡 システムを起動するには: ./scripts/renkei-start'));
+    }
+    
+  } catch (error) {
+    console.error(chalk.red.bold('❌ 状態確認エラー:'), error.message);
+  }
+}
+
+// タスク実行
+async function executeTask(taskDescription) {
+  try {
+    console.log(chalk.blue.bold('🤖 Renkei System v2 - タスクを実行しています...'));
+    console.log('');
+    
+    // RenkeiSystemの初期化
+    const system = new RenkeiSystem();
+    await system.initialize();
+    
+    // tmuxペインの取得と接続
+    const { outputPaneId } = getTmuxPaneIds();
+    if (outputPaneId) {
+      console.log(chalk.green(`✅ Output pane connected: ${outputPaneId}`));
+      
+      // AIManagerとTmuxManagerの接続
+      const components = system.getComponents();
+      if (components.aiManager && components.tmuxManager) {
+        components.aiManager.setTmuxManager(components.tmuxManager, outputPaneId);
+        console.log(chalk.green('✅ AI Manager connected to tmux output pane'));
+      }
+    }
+    
+    // システムを起動
+    await system.start();
+    
+    // タスクを実行
+    console.log(chalk.blue('📝 タスクを実行中...'));
+    const result = await system.executeTaskOnly(taskDescription);
+    
+    console.log('');
+    console.log(chalk.green.bold('✅ タスク実行完了'));
+    console.log(chalk.gray(result));
+    
+    // 部分的なクリーンアップのみ実行（システムは維持）
+    await system.partialShutdown();
+    
+  } catch (error) {
+    console.error(chalk.red.bold('❌ タスク実行エラー:'), error.message);
+    if (error.stack) {
+      console.error(chalk.gray(error.stack));
+    }
+    process.exit(1);
+  }
+}
+
+// メイン処理
+async function main() {
+  const { command, taskDescription } = parseArguments();
+  
+  try {
+    switch (command) {
+      case 'help':
+      case '--help':
+      case '-h':
+        showHelp();
+        break;
+        
+      case 'status':
+        await showStatus();
+        break;
+        
+      default:
+        // コマンド + 残りの引数をタスク記述として扱う
+        const fullTaskDescription = [command, taskDescription].filter(Boolean).join(' ');
+        await executeTask(fullTaskDescription);
+        break;
+    }
+  } catch (error) {
+    console.error(chalk.red.bold('❌ エラーが発生しました:'), error.message);
+    process.exit(1);
+  }
+}
+
+// スクリプト実行
+if (require.main === module) {
+  main();
+}

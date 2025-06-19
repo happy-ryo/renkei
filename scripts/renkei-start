@@ -142,6 +142,7 @@ function createTmuxSession(config) {
         sessionName,
         mainPaneId: panes[0] || `${sessionName}:0.0`,
         subPaneId: panes[1] || null,
+        chatPaneId: panes[2] || null,
         isExisting: true
       };
     } catch (error) {
@@ -168,43 +169,78 @@ function createTmuxSession(config) {
     execSync(tmuxCommand.join(' '), { stdio: 'pipe' });
     logSuccess(`Created tmux session: ${sessionName}`);
     
-    // メインペインのタイトル設定
-    execSync(`tmux select-pane -t ${sessionName}:0.0 -T "${config.tmux.mainPaneTitle}"`, { stdio: 'pipe' });
-    
-    // 垂直分割でサブペイン作成（ペインIDを取得）
-    let subPaneId;
-    try {
-      if (config.tmux.splitDirection === 'vertical') {
-        // 垂直分割の場合は10行の固定サイズ
-        subPaneId = execSync(`tmux split-window -t ${sessionName}:0 -v -l 10 -P -F "#{pane_id}"`, { encoding: 'utf8' }).trim();
-      } else {
-        // 水平分割の場合は40列の固定サイズ
-        subPaneId = execSync(`tmux split-window -t ${sessionName}:0 -h -l 40 -P -F "#{pane_id}"`, { encoding: 'utf8' }).trim();
-      }
-    } catch (splitError) {
-      logError(`Failed to create sub-pane: ${splitError.message}`);
-      throw splitError;
+    // TypeScriptビルドが完了しているかチェック
+    const layoutPath = path.join(process.cwd(), 'dist', 'ui', 'layouts', 'three-pane-layout.js');
+    if (!fs.existsSync(layoutPath)) {
+      logWarning('ThreePaneLayout not found. Falling back to manual 3-pane layout creation.');
+      
+      // 手動で3ペインレイアウトを作成
+      // メインペインのタイトル設定
+      execSync(`tmux select-pane -t ${sessionName}:0.0 -T "${config.tmux.mainPaneTitle}"`, { stdio: 'pipe' });
+      
+      // 下部用のペインを作成（固定サイズ20行）
+      const bottomPaneId = execSync(`tmux split-window -t ${sessionName}:0 -v -l 20 -P -F "#{pane_id}"`, { encoding: 'utf8' }).trim();
+      
+      // 下部ペインを左右に分割（ステータス用に60列）
+      const statusPaneId = execSync(`tmux split-window -t ${bottomPaneId} -h -l 60 -P -F "#{pane_id}"`, { encoding: 'utf8' }).trim();
+      const chatPaneId = bottomPaneId;
+      
+      // ペインタイトル設定
+      execSync(`tmux select-pane -t ${chatPaneId} -T "${config.tmux.chatPaneTitle || '💬 Interactive Chat'}"`, { stdio: 'pipe' });
+      execSync(`tmux select-pane -t ${statusPaneId} -T "${config.tmux.subPaneTitle}"`, { stdio: 'pipe' });
+      
+      // ペインボーダー表示を有効化
+      execSync(`tmux set-option -t ${sessionName} pane-border-status top`, { stdio: 'pipe' });
+      
+      // メインペインにフォーカス
+      execSync(`tmux select-pane -t ${sessionName}:0.0`, { stdio: 'pipe' });
+      
+      // メインペインIDを取得
+      const mainPaneId = execSync(`tmux list-panes -t ${sessionName} -F "#{pane_id}" | head -n 1`, { encoding: 'utf8' }).trim();
+      
+      logSuccess('3-pane tmux layout created manually');
+      
+      const result = {
+        sessionName,
+        mainPaneId,
+        subPaneId: statusPaneId,
+        chatPaneId,
+        isExisting: false
+      };
+      
+      logInfo(`Session info - Main: ${result.mainPaneId}, Status: ${result.subPaneId}, Chat: ${result.chatPaneId}`);
+      return result;
+    } else {
+      // ThreePaneLayoutを使用
+      const { ThreePaneLayout } = require('../dist/ui/layouts/three-pane-layout');
+      
+      const layoutManager = new ThreePaneLayout({
+        sessionName,
+        mainPaneTitle: config.tmux.mainPaneTitle,
+        chatPaneTitle: config.tmux.chatPaneTitle || '💬 Interactive Chat',
+        statusPaneTitle: config.tmux.subPaneTitle || '📊 Worker Status',
+        mainPaneHeightPercent: config.tmux.mainPaneSize || 50,
+        chatPaneWidthPercent: config.tmux.chatPaneSize || 50
+      });
+      
+      const layoutResult = layoutManager.createLayout();
+      
+      // ペインボーダー表示を有効化
+      execSync(`tmux set-option -t ${sessionName} pane-border-status top`, { stdio: 'pipe' });
+      
+      logSuccess('3-pane tmux layout created with ThreePaneLayout');
+      
+      const result = {
+        sessionName,
+        mainPaneId: layoutResult.mainPaneId,
+        subPaneId: layoutResult.statusPaneId,
+        chatPaneId: layoutResult.chatPaneId,
+        isExisting: false
+      };
+      
+      logInfo(`Session info - Main: ${result.mainPaneId}, Status: ${result.subPaneId}, Chat: ${result.chatPaneId}`);
+      return result;
     }
-    
-    logInfo(`Created sub-pane with ID: ${subPaneId}`);
-    
-    // サブペインのタイトル設定（ペインIDを使用）
-    execSync(`tmux select-pane -t ${subPaneId} -T "${config.tmux.subPaneTitle}"`, { stdio: 'pipe' });
-    
-    // メインペインにフォーカス
-    execSync(`tmux select-pane -t ${sessionName}:0.0`, { stdio: 'pipe' });
-    
-    logSuccess('tmux session layout configured');
-    
-    // メインペインIDを取得
-    const mainPaneId = execSync(`tmux list-panes -t ${sessionName} -F "#{pane_id}" | head -n 1`, { encoding: 'utf8' }).trim();
-    
-    return {
-      sessionName,
-      mainPaneId,
-      subPaneId,
-      isExisting: false
-    };
     
   } catch (error) {
     logError(`Failed to create tmux session: ${error.message}`);
@@ -239,7 +275,7 @@ function startSystem(config, sessionInfo) {
   try {
     logInfo('Starting Renkei System...');
     
-    const { mainPaneId, subPaneId } = sessionInfo;
+    const { mainPaneId, subPaneId, chatPaneId } = sessionInfo;
     
     // メインペインでシステム起動
     const startCommand = `node dist/index.js`;
@@ -251,6 +287,15 @@ function startSystem(config, sessionInfo) {
       execSync(`tmux send-keys -t ${subPaneId} "${monitorCommand}" Enter`, { stdio: 'pipe' });
     } else {
       logWarning('Sub-pane not found. Monitor display skipped.');
+    }
+    
+    // チャットペインの初期化（チャットペインが存在する場合）
+    if (chatPaneId) {
+      logInfo(`Initializing chat pane: ${chatPaneId}`);
+      // チャットCLIを起動
+      const chatCommand = `node dist/chat-cli.js`;
+      execSync(`tmux send-keys -t ${chatPaneId} "${chatCommand}" Enter`, { stdio: 'pipe' });
+      logSuccess('Chat interface started');
     }
     
     logSuccess('System startup commands sent to tmux session');

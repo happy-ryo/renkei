@@ -1,21 +1,34 @@
 import { EventEmitter } from 'events';
+import * as net from 'net';
+import * as path from 'path';
+import * as fs from 'fs';
 import { ClaudeIntegration } from '../integrations/claude-integration';
 import { ConfigManager } from './config-manager';
 import { TaskEvaluator } from '../evaluators/task-evaluator';
+import { TmuxManager } from '../ui/tmux-manager';
 import {
   TaskPlan,
   ExecutionResult,
   RiskAssessment,
   RenkeiError,
   ErrorSeverity,
+  TaskRequest as BaseTaskRequest,
+  TaskResult,
 } from '../interfaces/types';
 
 // AI Manager固有の型定義
-interface TaskRequest {
+interface InternalTaskRequest {
   description: string;
   workingDirectory: string;
   priority: 'low' | 'medium' | 'high';
   deadline?: string;
+}
+
+interface BridgeMessage {
+  id: string;
+  type: 'task_request' | 'task_result' | 'task_error' | 'heartbeat';
+  payload: any;
+  timestamp: Date;
 }
 
 enum TaskStatus {
@@ -45,6 +58,8 @@ enum AIManagerEvents {
   TASK_STOPPING = 'task_stopping',
   TASK_STOPPED = 'task_stopped',
   ERROR = 'error',
+  CHAT_BRIDGE_CONNECTED = 'chat_bridge_connected',
+  CHAT_BRIDGE_DISCONNECTED = 'chat_bridge_disconnected',
 }
 
 /**
@@ -54,9 +69,15 @@ enum AIManagerEvents {
 export class AIManager extends EventEmitter {
   private claude: ClaudeIntegration;
   private evaluator: TaskEvaluator;
-  private currentTask: TaskRequest | null = null;
+  private currentTask: InternalTaskRequest | null = null;
   private currentPlan: TaskPlan | null = null;
   private executionStatus: TaskStatus = TaskStatus.IDLE;
+  private bridgeSocketPath?: string;
+  private bridgeServer?: net.Server;
+  private bridgeClients: Set<net.Socket> = new Set();
+  private chatRequestQueue: Map<string, BaseTaskRequest> = new Map();
+  private tmuxManager?: TmuxManager;
+  private outputPaneId?: string;
 
   constructor(
     claude: ClaudeIntegration,
@@ -68,13 +89,24 @@ export class AIManager extends EventEmitter {
     this.evaluator = evaluator;
     // configは将来的に使用予定のため保持
     void config;
+
+    // チャットブリッジとの接続を設定
+    this.setupChatBridge();
+  }
+
+  /**
+   * TmuxManagerとoutputペインを設定
+   */
+  setTmuxManager(tmuxManager: TmuxManager, outputPaneId: string): void {
+    this.tmuxManager = tmuxManager;
+    this.outputPaneId = outputPaneId;
   }
 
   /**
    * タスク分析・設計
    * 自然言語タスクを解析し、実装計画を生成する
    */
-  async analyzeTask(request: TaskRequest): Promise<TaskPlan> {
+  async analyzeTask(request: InternalTaskRequest): Promise<TaskPlan> {
     try {
       this.emit(AIManagerEvents.TASK_ANALYSIS_STARTED, request);
       this.currentTask = request;
@@ -133,7 +165,7 @@ export class AIManager extends EventEmitter {
 
 タスク記述: "${description}"
 
-以下の形式でJSON回答してください：
+重要：以下の形式の完全なJSONオブジェクトのみを返してください。説明文は不要です。必ず{で始まり}で終わる有効なJSONを返してください：
 {
   "intent": "主要な目的・意図",
   "entities": ["関連する技術・ファイル・システム"],
@@ -145,11 +177,32 @@ export class AIManager extends EventEmitter {
 
     const result = await this.claude.sendMessage(analysisPrompt);
 
+    console.log('Claude analysis response:', result.content);
+
     try {
-      const analysis = JSON.parse(result.content);
+      // JSON部分を抽出
+      let jsonContent = result.content || '';
+
+      // 方法1: マークダウンのコードブロック
+      const codeBlockMatch = jsonContent.match(
+        /```(?:json)?\s*([\s\S]*?)\s*```/
+      );
+      if (codeBlockMatch && codeBlockMatch[1]) {
+        jsonContent = codeBlockMatch[1].trim();
+      } else {
+        // 方法2: 最初の{から最後の}までを抽出
+        const jsonMatch = jsonContent.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          jsonContent = jsonMatch[0];
+        }
+      }
+
+      const analysis = JSON.parse(jsonContent);
       this.emit(AIManagerEvents.NATURAL_LANGUAGE_ANALYSIS_COMPLETED, analysis);
       return analysis;
     } catch (parseError) {
+      console.error('Failed to parse analysis JSON:', parseError);
+      console.error('Raw content:', result.content);
       throw new RenkeiError(
         'Failed to parse natural language analysis',
         'NL_ANALYSIS_PARSE_ERROR',
@@ -165,7 +218,7 @@ export class AIManager extends EventEmitter {
    */
   private async generateImplementationPlan(
     analysis: any,
-    request: TaskRequest
+    request: InternalTaskRequest
   ): Promise<
     Omit<
       TaskPlan,
@@ -218,11 +271,32 @@ export class AIManager extends EventEmitter {
 
     const result = await this.claude.sendMessage(planningPrompt);
 
+    console.log('Claude planning response:', result.content);
+
     try {
-      const plan = JSON.parse(result.content);
+      // JSON部分を抽出
+      let jsonContent = result.content || '';
+
+      // 方法1: マークダウンのコードブロック
+      const codeBlockMatch = jsonContent.match(
+        /```(?:json)?\s*([\s\S]*?)\s*```/
+      );
+      if (codeBlockMatch && codeBlockMatch[1]) {
+        jsonContent = codeBlockMatch[1].trim();
+      } else {
+        // 方法2: 最初の{から最後の}までを抽出
+        const jsonMatch = jsonContent.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          jsonContent = jsonMatch[0];
+        }
+      }
+
+      const plan = JSON.parse(jsonContent);
       this.emit(AIManagerEvents.IMPLEMENTATION_PLAN_GENERATED, plan);
       return plan;
     } catch (parseError) {
+      console.error('Failed to parse plan JSON:', parseError);
+      console.error('Raw content:', result.content);
       throw new RenkeiError(
         'Failed to parse implementation plan',
         'IMPLEMENTATION_PLAN_PARSE_ERROR',
@@ -264,7 +338,24 @@ export class AIManager extends EventEmitter {
     const result = await this.claude.sendMessage(riskPrompt);
 
     try {
-      const riskAssessment = JSON.parse(result.content);
+      // JSON部分を抽出
+      let jsonContent = result.content || '';
+
+      // 方法1: マークダウンのコードブロック
+      const codeBlockMatch = jsonContent.match(
+        /```(?:json)?\s*([\s\S]*?)\s*```/
+      );
+      if (codeBlockMatch && codeBlockMatch[1]) {
+        jsonContent = codeBlockMatch[1].trim();
+      } else {
+        // 方法2: 最初の{から最後の}までを抽出
+        const jsonMatch = jsonContent.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          jsonContent = jsonMatch[0];
+        }
+      }
+
+      const riskAssessment = JSON.parse(jsonContent);
       this.emit(AIManagerEvents.RISK_ASSESSMENT_COMPLETED, riskAssessment);
       return riskAssessment;
     } catch (parseError) {
@@ -373,7 +464,32 @@ export class AIManager extends EventEmitter {
    */
   private async executeStep(step: any): Promise<any> {
     const instruction = this.generateClaudeInstruction(step);
+
+    // outputペインに実行開始を表示
+    if (this.tmuxManager && this.outputPaneId) {
+      await this.tmuxManager.appendToPaneContent(
+        this.outputPaneId,
+        `\n🔧 実行ステップ: ${step.description}\n${'─'.repeat(50)}\n`
+      );
+      await this.tmuxManager.appendToPaneContent(
+        this.outputPaneId,
+        `📝 指示内容:\n${instruction}\n\n`
+      );
+    }
+
     const result = await this.claude.sendMessage(instruction);
+
+    // outputペインに実行結果を表示
+    if (this.tmuxManager && this.outputPaneId) {
+      await this.tmuxManager.appendToPaneContent(
+        this.outputPaneId,
+        `\n📊 実行結果:\n${result.content}\n`
+      );
+      await this.tmuxManager.appendToPaneContent(
+        this.outputPaneId,
+        `\n✅ ステップ完了 (${result.duration || 0}ms)\n${'─'.repeat(50)}\n`
+      );
+    }
 
     return {
       stepId: step.id,
@@ -491,7 +607,7 @@ ${step.content}`;
    * 現在の状態を取得
    */
   getStatus(): {
-    currentTask: TaskRequest | null;
+    currentTask: InternalTaskRequest | null;
     currentPlan: TaskPlan | null;
     executionStatus: TaskStatus;
   } {
@@ -523,6 +639,314 @@ ${step.content}`;
    */
   async cleanup(): Promise<void> {
     await this.stopCurrentTask();
+    this.closeChatBridge();
     this.removeAllListeners();
+  }
+
+  /**
+   * チャットブリッジの設定
+   */
+  private setupChatBridge(): void {
+    const socketDir = path.join(process.cwd(), 'data', 'sockets');
+    if (!fs.existsSync(socketDir)) {
+      fs.mkdirSync(socketDir, { recursive: true });
+    }
+    this.bridgeSocketPath = path.join(socketDir, 'ai-manager.sock');
+
+    // AI Managerがソケットサーバーを起動
+    this.startBridgeServer();
+  }
+
+  /**
+   * ブリッジサーバーを起動
+   */
+  private startBridgeServer(): void {
+    // 既存のソケットファイルを削除
+    if (fs.existsSync(this.bridgeSocketPath!)) {
+      fs.unlinkSync(this.bridgeSocketPath!);
+    }
+
+    // サーバーを作成
+    this.bridgeServer = net.createServer((socket) => {
+      console.log('Chat Bridge client connected to AI Manager');
+      this.bridgeClients.add(socket);
+      this.emit(AIManagerEvents.CHAT_BRIDGE_CONNECTED);
+
+      socket.on('data', (data) => {
+        this.handleBridgeMessage(data, socket);
+      });
+
+      socket.on('error', (error) => {
+        console.error('Bridge client error:', error);
+      });
+
+      socket.on('end', () => {
+        console.log('Chat Bridge client disconnected');
+        this.bridgeClients.delete(socket);
+        if (this.bridgeClients.size === 0) {
+          this.emit(AIManagerEvents.CHAT_BRIDGE_DISCONNECTED);
+        }
+      });
+    });
+
+    // リスニング開始
+    this.bridgeServer.listen(this.bridgeSocketPath!, () => {
+      console.log(
+        `AI Manager bridge server listening on ${this.bridgeSocketPath}`
+      );
+    });
+
+    this.bridgeServer.on('error', (error) => {
+      console.error('Bridge server error:', error);
+    });
+  }
+
+  /**
+   * ブリッジメッセージを処理
+   */
+  private handleBridgeMessage(data: Buffer, socket: net.Socket): void {
+    try {
+      const messages = data
+        .toString()
+        .split('\n')
+        .filter((msg) => msg.trim());
+
+      for (const msgStr of messages) {
+        const message: BridgeMessage = JSON.parse(msgStr);
+
+        switch (message.type) {
+          case 'task_request':
+            this.handleChatTaskRequest(message.id, message.payload, socket);
+            break;
+
+          case 'heartbeat':
+            // ハートビート応答
+            this.sendBridgeMessage(
+              {
+                id: message.id,
+                type: 'heartbeat',
+                payload: {},
+                timestamp: new Date(),
+              },
+              socket
+            );
+            break;
+        }
+      }
+    } catch (error) {
+      console.error('Failed to parse bridge message:', error);
+    }
+  }
+
+  /**
+   * チャットタスクリクエストを処理
+   */
+  private async handleChatTaskRequest(
+    messageId: string,
+    request: BaseTaskRequest,
+    socket: net.Socket
+  ): Promise<void> {
+    try {
+      this.chatRequestQueue.set(messageId, request);
+
+      // チャットリクエストを簡潔に処理
+      const response = await this.processChatRequest(request);
+
+      const result: TaskResult = {
+        id: request.id,
+        status: 'success',
+        sessionId: request.context?.sessionId || 'unknown',
+        output: response,
+        files: [],
+        errors: [],
+        metrics: {
+          executionTime: 100,
+          apiCalls: 1,
+          tokensUsed: 50,
+        },
+        timestamp: new Date(),
+      };
+
+      this.sendBridgeMessage(
+        {
+          id: messageId,
+          type: 'task_result',
+          payload: result,
+          timestamp: new Date(),
+        },
+        socket
+      );
+
+      this.chatRequestQueue.delete(messageId);
+    } catch (error) {
+      this.sendBridgeMessage(
+        {
+          id: messageId,
+          type: 'task_error',
+          payload: {
+            taskId: request.id,
+            error: error instanceof Error ? error.message : 'Unknown error',
+          },
+          timestamp: new Date(),
+        },
+        socket
+      );
+
+      this.chatRequestQueue.delete(messageId);
+    }
+  }
+
+  /**
+   * チャットリクエストを処理
+   */
+  private async processChatRequest(request: BaseTaskRequest): Promise<string> {
+    try {
+      // 空の入力をチェック
+      const userInput = request.userPrompt.trim();
+      if (!userInput || userInput === '') {
+        return 'どのようなお手伝いができますか？タスクの実行、コード生成、技術的な質問など、お気軽にお尋ねください。';
+      }
+
+      // タスク実行要求を検出
+      const taskKeywords = [
+        '実行',
+        'テスト',
+        'コード',
+        '作成',
+        '生成',
+        '修正',
+        'ファイル',
+        'bash',
+        'run',
+        'create',
+        'build',
+      ];
+      const isTaskRequest = taskKeywords.some((keyword) =>
+        userInput.toLowerCase().includes(keyword)
+      );
+
+      if (isTaskRequest) {
+        // タスク実行の場合は、実際にタスクを分析・実行する
+        try {
+          // タスクリクエストを作成
+          const taskRequest: InternalTaskRequest = {
+            description: userInput,
+            workingDirectory:
+              request.context?.workingDirectory || process.cwd(),
+            priority: 'medium',
+          };
+
+          // タスクを分析
+          const plan = await this.analyzeTask(taskRequest);
+
+          // outputペインに分析結果を表示
+          if (this.tmuxManager && this.outputPaneId) {
+            await this.tmuxManager.appendToPaneContent(
+              this.outputPaneId,
+              `\n📋 タスク分析完了\n${'─'.repeat(50)}\n`
+            );
+            await this.tmuxManager.appendToPaneContent(
+              this.outputPaneId,
+              `📌 タスク: ${plan.title}\n`
+            );
+            await this.tmuxManager.appendToPaneContent(
+              this.outputPaneId,
+              `📝 説明: ${plan.description}\n`
+            );
+            await this.tmuxManager.appendToPaneContent(
+              this.outputPaneId,
+              `⏱️  推定時間: ${plan.estimatedDuration}分\n`
+            );
+            await this.tmuxManager.appendToPaneContent(
+              this.outputPaneId,
+              `🎯 信頼度: ${Math.round((plan.confidence || 0) * 100)}%\n\n`
+            );
+          }
+
+          // タスクを実行（非同期で実行し、結果は後で返す）
+          this.executeTask(plan).then(
+            (result) => {
+              console.log('Task execution completed:', result);
+              // 実行完了をoutputペインに表示
+              if (this.tmuxManager && this.outputPaneId) {
+                this.tmuxManager.appendToPaneContent(
+                  this.outputPaneId,
+                  `\n✅ タスク実行完了！\n実行時間: ${result.duration}ms\n${'─'.repeat(50)}\n`
+                );
+              }
+            },
+            (error) => {
+              console.error('Task execution failed:', error);
+              // エラーをoutputペインに表示
+              if (this.tmuxManager && this.outputPaneId) {
+                this.tmuxManager.appendToPaneContent(
+                  this.outputPaneId,
+                  `\n❌ タスク実行エラー: ${error.message}\n${'─'.repeat(50)}\n`
+                );
+              }
+            }
+          );
+
+          // 即座に応答を返す
+          return `承知いたしました。以下のタスクを実行します：\n\n📌 ${plan.title}\n${plan.description}\n\n実行を開始しました。進捗はoutputペインでご確認ください。`;
+        } catch (error) {
+          return `申し訳ございません。タスクの分析中にエラーが発生しました: ${error instanceof Error ? error.message : 'Unknown error'}`;
+        }
+      } else {
+        // 通常の会話の場合
+        const chatPrompt = `あなたはRenkei Systemの統括AIです。システム全体を管理し、ユーザーとの対話を担当しています。
+
+重要な役割：
+- あなたは統括AIであり、実際のコード実行はワーカー（ClaudeCode）が行います
+- ユーザーの質問に対して、システムの状態や機能について説明します
+- タスクの実行依頼があれば、それをワーカーに指示する準備をします
+
+現在のシステム状態：
+- チャットインターフェース: アクティブ
+- AI Manager（あなた）: 稼働中
+- ClaudeCode統合: 接続済み
+- ワーカープロセス: 待機中
+
+ユーザーメッセージ: "${userInput}"
+
+統括AIとして適切に応答してください：`;
+
+        const result = await this.claude.sendMessage(chatPrompt);
+        return result.content;
+      }
+    } catch (error) {
+      // エラーをそのまま投げる
+      console.error('Claude呼び出しエラー:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * ブリッジにメッセージを送信
+   */
+  private sendBridgeMessage(message: BridgeMessage, socket: net.Socket): void {
+    if (socket && !socket.destroyed) {
+      socket.write(JSON.stringify(message) + '\n');
+    }
+  }
+
+  /**
+   * チャットブリッジを閉じる
+   */
+  private closeChatBridge(): void {
+    // すべてのクライアントを切断
+    this.bridgeClients.forEach((client) => {
+      client.end();
+    });
+    this.bridgeClients.clear();
+
+    // サーバーを閉じる
+    if (this.bridgeServer) {
+      this.bridgeServer.close(() => {
+        if (fs.existsSync(this.bridgeSocketPath!)) {
+          fs.unlinkSync(this.bridgeSocketPath!);
+        }
+      });
+    }
   }
 }

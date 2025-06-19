@@ -16,6 +16,7 @@ import {
 import { ClaudeIntegration } from '../integrations/claude-integration';
 import { AIManager } from './ai-manager';
 import { ConfigManager } from './config-manager';
+import { TmuxManager } from '../ui/tmux-manager';
 
 /**
  * タスク実行状態
@@ -156,6 +157,8 @@ export class TaskManager extends EventEmitter {
   private claudeIntegration: ClaudeIntegration;
   private qualityEvaluator: QualityEvaluator;
   private logFilePath: string;
+  private tmuxManager?: TmuxManager;
+  private outputPaneId?: string;
 
   private activeTasks = new Map<string, TaskContext>();
   private taskQueue: Task[] = [];
@@ -182,6 +185,15 @@ export class TaskManager extends EventEmitter {
 
     this.setupEventHandlers();
     this.logWorkerStatus('🚀 TaskManager initialized', 'info');
+  }
+
+  /**
+   * TmuxManagerとoutputペインを設定
+   */
+  setTmuxManager(tmuxManager: TmuxManager, outputPaneId: string): void {
+    this.tmuxManager = tmuxManager;
+    this.outputPaneId = outputPaneId;
+    this.logWorkerStatus('📺 TmuxManager connected', 'info');
   }
 
   /**
@@ -416,13 +428,54 @@ export class TaskManager extends EventEmitter {
 
         // Claude Codeでステップを実行
         const sessionId = await this.claudeIntegration.createSession();
-        const taskId = await this.claudeIntegration.executeTask(sessionId, {
-          prompt: step.description,
-          options: {
-            maxTurns: 1,
-            autoApprove: true,
+
+        // outputペインに実行開始を表示
+        if (this.tmuxManager && this.outputPaneId) {
+          await this.tmuxManager.appendToPaneContent(
+            this.outputPaneId,
+            `\n🔧 実行ステップ: ${step.description}\n${'─'.repeat(50)}\n`
+          );
+        }
+
+        // ClaudeCodeの出力をリアルタイムで表示するハンドラー
+        const handlers = {
+          onMessage: async (message: any) => {
+            if (this.tmuxManager && this.outputPaneId && message.content) {
+              await this.tmuxManager.appendToPaneContent(
+                this.outputPaneId,
+                message.content
+              );
+            }
           },
-        });
+          onProgress: async (progress: any) => {
+            if (this.tmuxManager && this.outputPaneId) {
+              await this.tmuxManager.appendToPaneContent(
+                this.outputPaneId,
+                `⏳ ${progress.message || '処理中...'}\n`
+              );
+            }
+          },
+          onComplete: async (_result: any) => {
+            if (this.tmuxManager && this.outputPaneId) {
+              await this.tmuxManager.appendToPaneContent(
+                this.outputPaneId,
+                `\n✅ ステップ完了\n${'─'.repeat(50)}\n`
+              );
+            }
+          },
+        };
+
+        const taskId = await this.claudeIntegration.executeTask(
+          sessionId,
+          {
+            prompt: step.description,
+            options: {
+              maxTurns: 1,
+              autoApprove: true,
+            },
+          },
+          handlers
+        );
 
         step.output = `Task ${taskId} executed`;
         step.artifacts = [];

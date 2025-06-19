@@ -4,7 +4,7 @@
  */
 
 import { EventEmitter } from 'events';
-import { spawn, ChildProcess } from 'child_process';
+import { spawn, ChildProcess, execSync } from 'child_process';
 import path from 'path';
 import fs from 'fs/promises';
 import {
@@ -32,19 +32,20 @@ export class ClaudeIntegration extends EventEmitter {
   private config: ClaudeControllerConfig;
   private claudeProcess: ChildProcess | null = null;
   private isInitialized = false;
+  private claudeExecutablePath: string | null = null;
 
   constructor(config: ClaudeControllerConfig) {
     super();
     const defaultConfig: ClaudeControllerConfig = {
       maxRetries: 3,
       retryDelay: 1000,
-      timeout: 30000,
+      timeout: 1200000, // 20分
       defaultOptions: {
         maxTurns: 10,
         autoApprove: false,
         allowedTools: ['read_file', 'write_to_file', 'execute_command'],
         outputFormat: 'text',
-        timeout: 30000,
+        timeout: 1200000, // 20分
       },
     };
     this.config = { ...defaultConfig, ...config };
@@ -54,6 +55,10 @@ export class ClaudeIntegration extends EventEmitter {
    * ClaudeCode統合システムの初期化
    */
   async initialize(): Promise<void> {
+    if (this.isInitialized) {
+      return;
+    }
+
     try {
       // ClaudeCodeが利用可能かチェック
       await this.checkClaudeCodeAvailability();
@@ -64,6 +69,8 @@ export class ClaudeIntegration extends EventEmitter {
       this.isInitialized = true;
       this.emit('initialized');
     } catch (error) {
+      console.error('ClaudeCode初期化エラー:', error);
+      // エラーを上位に伝播して、問題を明確にする
       throw new ClaudeCodeError(
         ClaudeErrorCode.INTERNAL_ERROR,
         'ClaudeCode統合の初期化に失敗しました',
@@ -73,36 +80,122 @@ export class ClaudeIntegration extends EventEmitter {
   }
 
   /**
+   * Claude実行ファイルのパスを取得
+   */
+  private async findClaudeExecutable(): Promise<string> {
+    // 1. 設定ファイルからパスを確認
+    const configPath = (this.config as any).executablePath;
+    if (configPath && (await this.isExecutable(configPath))) {
+      console.log(`Claude found from config: ${configPath}`);
+      return configPath;
+    }
+
+    // 2. PATHから検索
+    try {
+      const whichResult = execSync('which claude', { encoding: 'utf8' }).trim();
+      if (whichResult && (await this.isExecutable(whichResult))) {
+        console.log(`Claude found in PATH: ${whichResult}`);
+        return whichResult;
+      }
+    } catch {
+      // whichコマンドが失敗
+    }
+
+    // 3. 一般的なパスを試す
+    const commonPaths = [
+      // Voltaの一般的なパス
+      `${process.env['HOME']}/.volta/bin/claude`,
+      // システム標準のパス
+      '/usr/local/bin/claude',
+      '/usr/bin/claude',
+      '/opt/homebrew/bin/claude',
+      // ユーザーローカルのパス
+      `${process.env['HOME']}/.local/bin/claude`,
+      `${process.env['HOME']}/bin/claude`,
+      // npmグローバルインストール
+      `${process.env['HOME']}/.npm-global/bin/claude`,
+    ];
+
+    for (const path of commonPaths) {
+      if (await this.isExecutable(path)) {
+        console.log(`Claude found at: ${path}`);
+        return path;
+      }
+    }
+
+    throw new ClaudeCodeError(
+      ClaudeErrorCode.API_ERROR,
+      'Claudeコマンドが見つかりません。executablePathを設定してください'
+    );
+  }
+
+  /**
+   * ファイルが実行可能かチェック
+   */
+  private async isExecutable(path: string): Promise<boolean> {
+    try {
+      await fs.access(path, fs.constants.F_OK); // まず存在確認
+      await fs.access(path, fs.constants.X_OK); // 実行権限確認
+      return true;
+    } catch (error) {
+      console.log(`Path ${path} is not accessible:`, error);
+      return false;
+    }
+  }
+
+  /**
    * ClaudeCodeが利用可能かチェック
    */
   private async checkClaudeCodeAvailability(): Promise<void> {
-    return new Promise((resolve, reject) => {
-      const process = spawn('claude', ['--version'], { stdio: 'pipe' });
+    // Claude実行ファイルを検索
+    this.claudeExecutablePath = await this.findClaudeExecutable();
 
+    console.log(
+      `Checking Claude availability at: ${this.claudeExecutablePath}`
+    );
+
+    return new Promise((resolve, reject) => {
+      const claudeProcess = spawn(this.claudeExecutablePath!, ['--version'], {
+        stdio: 'pipe',
+        env: { ...process.env }, // 環境変数を継承
+      });
+
+      let stdout = '';
       let stderr = '';
-      process.stderr?.on('data', (data) => {
+
+      claudeProcess.stdout?.on('data', (data) => {
+        stdout += data.toString();
+      });
+
+      claudeProcess.stderr?.on('data', (data) => {
         stderr += data.toString();
       });
 
-      process.on('close', (code) => {
+      claudeProcess.on('close', (code) => {
         if (code === 0) {
+          console.log('Claude version:', stdout.trim());
           resolve();
         } else {
+          console.error(`Claude version check failed with code ${code}`);
+          console.error('stdout:', stdout);
+          console.error('stderr:', stderr);
           reject(
             new ClaudeCodeError(
               ClaudeErrorCode.API_ERROR,
-              'ClaudeCodeが見つからないか、実行できません',
-              stderr
+              `ClaudeCodeが見つからないか、実行できません (exit code: ${code})`,
+              `stdout: ${stdout}\nstderr: ${stderr}`
             )
           );
         }
       });
 
-      process.on('error', (_error) => {
+      claudeProcess.on('error', (error) => {
+        console.error('Failed to spawn Claude process:', error);
         reject(
           new ClaudeCodeError(
             ClaudeErrorCode.NETWORK_ERROR,
-            'ClaudeCodeプロセスの起動に失敗しました'
+            `ClaudeCodeプロセスの起動に失敗しました: ${error.message}`,
+            error.stack || error.message
           )
         );
       });
@@ -295,9 +388,13 @@ export class ClaudeIntegration extends EventEmitter {
     return new Promise((resolve, reject) => {
       const args = this.buildClaudeCodeArgs(task);
 
-      this.claudeProcess = spawn('claude', args, {
+      // 保存されたclaudeパスを使用
+      const claudePath = this.claudeExecutablePath || 'claude';
+
+      this.claudeProcess = spawn(claudePath, args, {
         cwd: session.context.workingDirectory,
         stdio: 'pipe',
+        env: { ...process.env },
       });
 
       let stdout = '';
@@ -525,35 +622,100 @@ export class ClaudeIntegration extends EventEmitter {
    */
   async sendMessage(
     prompt: string,
-    sessionId?: string
+    _sessionId?: string
   ): Promise<{ content: string; duration?: number }> {
-    const targetSessionId = sessionId || (await this.createSession());
+    this.ensureInitialized();
 
     const startTime = Date.now();
-    const taskId = await this.executeTask(targetSessionId, {
-      prompt,
-      options: {
-        maxTurns: 1,
-        autoApprove: true,
-        outputFormat: 'text',
-      },
+
+    // モックモードは使わない - 常に実際のClaudeを使う
+
+    return new Promise((resolve, reject) => {
+      // シンプルにテキスト形式で応答を受け取る（stream-jsonは--verboseが必要で複雑になるため）
+      const args = ['--print', '--output-format', 'text'];
+      let fullContent = '';
+      let errorOutput = '';
+
+      // 保存されたclaudeパスを使用
+      const claudePath = this.claudeExecutablePath || 'claude';
+
+      console.log(
+        `Executing Claude: ${claudePath} --print --output-format text`
+      );
+
+      const claudeProcess = spawn(claudePath, args, {
+        cwd: process.cwd(),
+        env: { ...process.env },
+      });
+
+      claudeProcess.stdout?.on('data', (data) => {
+        fullContent += data.toString();
+      });
+
+      claudeProcess.stderr?.on('data', (data) => {
+        errorOutput += data.toString();
+      });
+
+      claudeProcess.on('close', (code) => {
+        const duration = Date.now() - startTime;
+        console.log(
+          `Claude process exited with code ${code}, duration: ${duration}ms`
+        );
+
+        if (code === 0) {
+          resolve({
+            content: fullContent.trim(),
+            duration,
+          });
+        } else {
+          // エラーが発生した場合は、AI Managerのモックモードにフォールバック
+          reject(
+            new ClaudeCodeError(
+              ClaudeErrorCode.API_ERROR,
+              `Claude process exited with code ${code}`,
+              errorOutput
+            )
+          );
+        }
+      });
+
+      claudeProcess.on('error', (error) => {
+        console.error(`Failed to spawn Claude process: ${error.message}`);
+        reject(
+          new ClaudeCodeError(
+            ClaudeErrorCode.NETWORK_ERROR,
+            'Failed to spawn Claude process',
+            error.message
+          )
+        );
+      });
+
+      // タイムアウト処理を追加（20分に設定）
+      const timeout = setTimeout(() => {
+        if (!claudeProcess.killed) {
+          console.error('Claude process timeout after 20 minutes');
+          claudeProcess.kill();
+          reject(
+            new ClaudeCodeError(
+              ClaudeErrorCode.TIMEOUT,
+              'Claude process timeout',
+              'Process did not complete within 20 minutes'
+            )
+          );
+        }
+      }, 1200000); // 20分（1200秒）
+
+      // プロセスが終了したらタイムアウトをクリア
+      claudeProcess.on('exit', () => {
+        clearTimeout(timeout);
+      });
+
+      // プロンプトを標準入力に送信
+      if (claudeProcess.stdin) {
+        claudeProcess.stdin.write(prompt);
+        claudeProcess.stdin.end();
+      }
     });
-
-    // タスク結果を取得
-    const task = this.activeTasks.get(taskId);
-    const duration = Date.now() - startTime;
-
-    if (task?.result) {
-      return {
-        content: task.result.output || '',
-        duration,
-      };
-    } else {
-      return {
-        content: '',
-        duration,
-      };
-    }
   }
 
   /**

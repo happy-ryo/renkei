@@ -110,6 +110,16 @@ function findRenkeiProcesses() {
             }
           }
         }
+        // tail -f コマンドも対象に含める
+        if (line.includes('tail') && line.includes('renkei-worker.log')) {
+          const parts = line.trim().split(/\s+/);
+          if (parts.length >= 2) {
+            const pid = parseInt(parts[1]);
+            if (!isNaN(pid)) {
+              processes.push({ pid, command: parts.slice(10).join(' ') });
+            }
+          }
+        }
       }
     } catch (error) {
       logWarning('Failed to search for Node.js processes');

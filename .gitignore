@@ -144,3 +144,4 @@ workspace/test-e2e/
 workspace/*.json
 workspace/*.tmp
 workspace/*.log
+venv/

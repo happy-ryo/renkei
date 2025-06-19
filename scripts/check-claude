@@ -1,0 +1,122 @@
+#!/bin/bash
+
+# Renkei System - Claude Command Checker
+# Claudeコマンドが利用可能かチェックするスクリプト
+
+set -e
+
+# カラーコード
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+NC='\033[0m' # No Color
+BOLD='\033[1m'
+
+echo -e "${CYAN}${BOLD}🔍 Claude Command Availability Check${NC}"
+echo ""
+
+# 1. claudeコマンドの存在確認
+echo -e "${BLUE}1. Checking if 'claude' command exists...${NC}"
+if command -v claude &> /dev/null; then
+    echo -e "${GREEN}✅ 'claude' command found${NC}"
+    CLAUDE_PATH=$(which claude)
+    echo -e "   Path: ${CLAUDE_PATH}"
+else
+    echo -e "${RED}❌ 'claude' command not found${NC}"
+    echo -e "${YELLOW}   Please install Claude CLI or add it to PATH${NC}"
+    exit 1
+fi
+
+echo ""
+
+# 2. バージョン確認
+echo -e "${BLUE}2. Checking Claude version...${NC}"
+if claude --version &> /dev/null; then
+    VERSION=$(claude --version 2>&1)
+    echo -e "${GREEN}✅ Version check successful${NC}"
+    echo -e "   Version: ${VERSION}"
+else
+    echo -e "${YELLOW}⚠️  Version check failed${NC}"
+    echo -e "   Error: $(claude --version 2>&1)"
+fi
+
+echo ""
+
+# 3. 実行権限の確認
+echo -e "${BLUE}3. Checking execute permissions...${NC}"
+if [ -x "$(command -v claude)" ]; then
+    echo -e "${GREEN}✅ Execute permission OK${NC}"
+else
+    echo -e "${RED}❌ No execute permission${NC}"
+fi
+
+echo ""
+
+# 4. 簡単な動作テスト
+echo -e "${BLUE}4. Testing basic functionality...${NC}"
+echo -e "${YELLOW}   Running: echo 'test' | claude --no-update-check 2>&1${NC}"
+
+# テスト実行
+TEST_OUTPUT=$(echo "test" | claude --no-update-check 2>&1 || true)
+TEST_EXIT_CODE=$?
+
+if [ $TEST_EXIT_CODE -eq 0 ]; then
+    echo -e "${GREEN}✅ Basic test passed${NC}"
+    echo -e "   Exit code: 0"
+else
+    echo -e "${YELLOW}⚠️  Basic test returned non-zero exit code${NC}"
+    echo -e "   Exit code: ${TEST_EXIT_CODE}"
+fi
+
+if [ -n "$TEST_OUTPUT" ]; then
+    echo -e "   Output preview (first 3 lines):"
+    echo "$TEST_OUTPUT" | head -3 | sed 's/^/     /'
+fi
+
+echo ""
+
+# 5. 環境変数の確認
+echo -e "${BLUE}5. Checking relevant environment variables...${NC}"
+if [ -n "$ANTHROPIC_API_KEY" ]; then
+    echo -e "${GREEN}✅ ANTHROPIC_API_KEY is set${NC}"
+    echo -e "   Length: ${#ANTHROPIC_API_KEY} characters"
+else
+    echo -e "${YELLOW}⚠️  ANTHROPIC_API_KEY is not set${NC}"
+    echo -e "   This may be required for some Claude CLI features"
+fi
+
+echo ""
+
+# 6. プロセス起動テスト
+echo -e "${BLUE}6. Testing process spawn capability...${NC}"
+SPAWN_TEST=$(timeout 2s claude --help > /dev/null 2>&1 && echo "success" || echo "failed")
+
+if [ "$SPAWN_TEST" = "success" ]; then
+    echo -e "${GREEN}✅ Process spawn test successful${NC}"
+else
+    echo -e "${RED}❌ Process spawn test failed${NC}"
+    echo -e "   Claude process may be hanging or not responding"
+fi
+
+echo ""
+
+# 最終判定
+echo -e "${CYAN}${BOLD}📊 Summary${NC}"
+echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+
+if command -v claude &> /dev/null && [ $TEST_EXIT_CODE -eq 0 ] || [ $TEST_EXIT_CODE -eq 1 ]; then
+    echo -e "${GREEN}${BOLD}✅ Claude command is available and functional${NC}"
+    echo -e "${GREEN}   Renkei System can use Claude for AI operations${NC}"
+    exit 0
+else
+    echo -e "${RED}${BOLD}❌ Claude command is not properly configured${NC}"
+    echo -e "${RED}   Renkei System will use mock mode for AI operations${NC}"
+    echo ""
+    echo -e "${YELLOW}Troubleshooting tips:${NC}"
+    echo -e "1. Install Claude CLI: ${CYAN}pip install anthropic${NC}"
+    echo -e "2. Check PATH: ${CYAN}export PATH=\$PATH:/path/to/claude${NC}"
+    echo -e "3. Set API key: ${CYAN}export ANTHROPIC_API_KEY='your-api-key'${NC}"
+    exit 1
+fi

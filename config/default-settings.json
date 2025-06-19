@@ -6,8 +6,11 @@
     "sessionName": "renkei",
     "mainPaneTitle": "AI Manager",
     "subPaneTitle": "ClaudeCode Status",
+    "chatPaneTitle": "💬 Interactive Chat",
     "splitDirection": "horizontal",
-    "mainPaneSize": 70
+    "mainPaneSize": 50,
+    "chatPaneSize": 50,
+    "chatPane": true
   },
   "claude": {
     "apiKey": "",
@@ -15,6 +18,8 @@
     "maxTurns": 10,
     "timeout": 300000,
     "outputFormat": "json",
+    "executablePath": null,
+    "executablePathComment": "ClaudeCodeの実行パスを指定できます。例: '/home/user/.volta/bin/claude' または '/usr/local/bin/claude'",
     "allowedTools": [
       "Write",
       "Read",
