@@ -165,12 +165,16 @@ export class AIManager extends EventEmitter {
 `;
 
     const result = await this.claude.sendMessage(analysisPrompt);
+    
+    console.log('Claude analysis response:', result.content);
 
     try {
       const analysis = JSON.parse(result.content);
       this.emit(AIManagerEvents.NATURAL_LANGUAGE_ANALYSIS_COMPLETED, analysis);
       return analysis;
     } catch (parseError) {
+      console.error('Failed to parse analysis JSON:', parseError);
+      console.error('Raw content:', result.content);
       throw new RenkeiError(
         'Failed to parse natural language analysis',
         'NL_ANALYSIS_PARSE_ERROR',
@@ -238,12 +242,16 @@ export class AIManager extends EventEmitter {
 `;
 
     const result = await this.claude.sendMessage(planningPrompt);
+    
+    console.log('Claude planning response:', result.content);
 
     try {
       const plan = JSON.parse(result.content);
       this.emit(AIManagerEvents.IMPLEMENTATION_PLAN_GENERATED, plan);
       return plan;
     } catch (parseError) {
+      console.error('Failed to parse plan JSON:', parseError);
+      console.error('Raw content:', result.content);
       throw new RenkeiError(
         'Failed to parse implementation plan',
         'IMPLEMENTATION_PLAN_PARSE_ERROR',
@@ -713,8 +721,22 @@ ${step.content}`;
       }
 
       // タスク実行要求を検出
-      const taskKeywords = ['実行', 'テスト', 'コード', '作成', '生成', '修正', 'ファイル', 'bash', 'run', 'create', 'build'];
-      const isTaskRequest = taskKeywords.some(keyword => userInput.toLowerCase().includes(keyword));
+      const taskKeywords = [
+        '実行',
+        'テスト',
+        'コード',
+        '作成',
+        '生成',
+        '修正',
+        'ファイル',
+        'bash',
+        'run',
+        'create',
+        'build',
+      ];
+      const isTaskRequest = taskKeywords.some((keyword) =>
+        userInput.toLowerCase().includes(keyword)
+      );
 
       if (isTaskRequest) {
         // タスク実行の場合は、実際にタスクを分析・実行する
@@ -722,13 +744,14 @@ ${step.content}`;
           // タスクリクエストを作成
           const taskRequest: InternalTaskRequest = {
             description: userInput,
-            workingDirectory: request.context?.workingDirectory || process.cwd(),
+            workingDirectory:
+              request.context?.workingDirectory || process.cwd(),
             priority: 'medium',
           };
 
           // タスクを分析
           const plan = await this.analyzeTask(taskRequest);
-          
+
           // シンプルな応答を返す（実際の実行は別プロセスで）
           return `承知いたしました。以下のタスクを実行します：\n\n${plan.description}\n\n実行を開始しています...`;
         } catch (error) {
