@@ -39,13 +39,13 @@ export class ClaudeIntegration extends EventEmitter {
     const defaultConfig: ClaudeControllerConfig = {
       maxRetries: 3,
       retryDelay: 1000,
-      timeout: 30000,
+      timeout: 1200000, // 20分
       defaultOptions: {
         maxTurns: 10,
         autoApprove: false,
         allowedTools: ['read_file', 'write_to_file', 'execute_command'],
         outputFormat: 'text',
-        timeout: 30000,
+        timeout: 1200000, // 20分
       },
     };
     this.config = { ...defaultConfig, ...config };
@@ -682,26 +682,26 @@ export class ClaudeIntegration extends EventEmitter {
         );
       });
 
-      // タイムアウト処理を追加
+      // タイムアウト処理を追加（20分に設定）
       const timeout = setTimeout(() => {
         if (!claudeProcess.killed) {
-          console.error('Claude process timeout after 60 seconds');
+          console.error('Claude process timeout after 20 minutes');
           claudeProcess.kill();
           reject(
             new ClaudeCodeError(
               ClaudeErrorCode.TIMEOUT,
               'Claude process timeout',
-              'Process did not complete within 60 seconds'
+              'Process did not complete within 20 minutes'
             )
           );
         }
-      }, 60000); // 60秒に延長
+      }, 1200000); // 20分（1200秒）
 
       // プロセスが終了したらタイムアウトをクリア
       claudeProcess.on('exit', () => {
         clearTimeout(timeout);
       });
-      
+
       // プロンプトを標準入力に送信
       if (claudeProcess.stdin) {
         claudeProcess.stdin.write(prompt);
